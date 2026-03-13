@@ -1,0 +1,113 @@
+# Full-featured example: StatefulSet with PVC, ConfigMap, Secret, CronJob, RBAC, extraDeploy
+
+workload:
+  type: statefulset
+
+image:
+  repository: postgres
+  tag: "16"
+
+replicaCount: 3
+
+ports:
+  - name: postgres
+    containerPort: 5432
+
+env:
+  - name: POSTGRES_DB
+    value: mydb
+  - name: POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: pg-secret
+        key: password
+
+envFrom:
+  - configMapRef:
+      name: pg-config
+
+volumeMounts:
+  - name: data
+    mountPath: /var/lib/postgresql/data
+
+# StatefulSet volumeClaimTemplates
+volumeClaimTemplates:
+  - name: data
+    accessModes: [ReadWriteOnce]
+    size: 20Gi
+    storageClassName: fast-ssd
+
+# ConfigMaps
+configMaps:
+  - name: pg-config
+    data:
+      POSTGRES_HOST: localhost
+      pg.conf: |
+        max_connections = 200
+        shared_buffers = 256MB
+
+# Secrets
+secrets:
+  - name: pg-secret
+    stringData:
+      password: "supersecret"
+
+# ServiceAccount with RBAC
+serviceAccount:
+  create: true
+  name: postgres-sa
+
+rbac:
+  roles:
+    - name: postgres-role
+      rules:
+        - apiGroups: [""]
+          resources: ["pods", "configmaps"]
+          verbs: ["get", "list"]
+  roleBindings:
+    - name: postgres-rb
+      roleRef: postgres-role
+      subjects:
+        - kind: ServiceAccount
+          name: postgres-sa
+
+# CronJob for backups
+cronjobs:
+  - name: backup
+    schedule: "0 2 * * *"
+    concurrencyPolicy: Forbid
+    jobTemplate:
+      restartPolicy: OnFailure
+      command: ["/bin/sh", "-c", "pg_dump mydb > /backup/dump.sql"]
+
+# NetworkPolicy
+networkPolicies:
+  - name: allow-app-ingress
+    podSelector: {}
+    policyTypes: [Ingress]
+    ingress:
+      - from:
+          - podSelector:
+              matchLabels:
+                app: myapp
+        ports:
+          - port: 5432
+
+# Prometheus monitoring
+serviceMonitor:
+  enabled: true
+  port: http
+  path: /metrics
+  interval: 30s
+
+# extraDeploy — custom resource not in the chart
+extraDeploy:
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: {{ .Release.Name }}-extra
+      namespace: {{ .Release.Namespace }}
+    data:
+      custom-key: "I can put anything here"
+      release-name: "{{ .Release.Name }}"

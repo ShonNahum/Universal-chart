@@ -1,0 +1,27 @@
+{{- range .Values.jobs }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%s" (include "universal-chart.fullname" $) .name }}
+  labels:
+    {{- include "universal-chart.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with merge ($.Values.commonAnnotations | default dict) (.annotations | default dict) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .backoffLimit | default 3 }}
+  {{- with .activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "universal-chart.selectorLabels" $ | nindent 8 }}
+    spec:
+      {{- include "universal-chart.jobPodSpec" (dict "Values" $.Values "Chart" $.Chart "Release" $.Release "job" .) | nindent 6 }}
+{{- end }}

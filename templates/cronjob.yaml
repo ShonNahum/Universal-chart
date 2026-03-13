@@ -1,0 +1,30 @@
+{{- range .Values.cronjobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ printf "%s-%s" (include "universal-chart.fullname" $) .name }}
+  labels:
+    {{- include "universal-chart.labels" $ | nindent 4 }}
+  {{- with merge ($.Values.commonAnnotations | default dict) (.annotations | default dict) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ .schedule | quote }}
+  concurrencyPolicy: {{ .concurrencyPolicy | default "Forbid" }}
+  successfulJobsHistoryLimit: {{ .successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .failedJobsHistoryLimit | default 1 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .jobTemplate.backoffLimit | default 3 }}
+      {{- with .jobTemplate.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "universal-chart.selectorLabels" $ | nindent 12 }}
+        spec:
+          {{- include "universal-chart.jobPodSpec" (dict "Values" $.Values "Chart" $.Chart "Release" $.Release "job" (merge .jobTemplate (dict "name" .name))) | nindent 10 }}
+{{- end }}

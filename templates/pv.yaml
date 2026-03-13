@@ -1,0 +1,76 @@
+{{- range .Values.persistentVolumes }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "universal-chart.labels" $ | nindent 4 }}
+  {{- with merge ($.Values.commonAnnotations | default dict) (.annotations | default dict) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  capacity:
+    storage: {{ .capacity }}
+  accessModes:
+    {{- toYaml .accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: {{ .reclaimPolicy | default "Retain" }}
+  {{- with .storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  volumeMode: {{ .volumeMode | default "Filesystem" }}
+  {{- with .mountOptions }}
+  mountOptions:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .nodeAffinity }}
+  nodeAffinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- /* ── Volume sources — define exactly one ───────── */}}
+  {{- with .hostPath }}
+  hostPath:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .nfs }}
+  nfs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .csi }}
+  csi:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .local }}
+  local:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .iscsi }}
+  iscsi:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .fc }}
+  fc:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .rbd }}
+  rbd:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .gcePersistentDisk }}
+  gcePersistentDisk:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .awsElasticBlockStore }}
+  awsElasticBlockStore:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .azureDisk }}
+  azureDisk:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .azureFile }}
+  azureFile:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

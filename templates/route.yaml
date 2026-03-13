@@ -1,0 +1,40 @@
+{{- with .Values.route }}
+{{- if .enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "universal-chart.fullname" $ }}
+  labels:
+    {{- include "universal-chart.labels" $ | nindent 4 }}
+  {{- with merge ($.Values.commonAnnotations | default dict) (.annotations | default dict) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ .host | default "" }}
+  {{- with .path }}
+  path: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "universal-chart.fullname" $ }}
+    weight: 100
+  port:
+    targetPort: {{ .targetPort | default (index $.Values.service.ports 0).name }}
+  {{- if .tls }}
+  tls:
+    termination: {{ .tls.termination | default "edge" }}
+    insecureEdgeTerminationPolicy: {{ .tls.insecureEdgeTerminationPolicy | default "Redirect" }}
+    {{- with .tls.certificate }}
+    certificate: {{ . }}
+    {{- end }}
+    {{- with .tls.key }}
+    key: {{ . }}
+    {{- end }}
+    {{- with .tls.caCertificate }}
+    caCertificate: {{ . }}
+    {{- end }}
+  {{- end }}
+  wildcardPolicy: {{ .wildcardPolicy | default "None" }}
+{{- end }}
+{{- end }}

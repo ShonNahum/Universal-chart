@@ -1,0 +1,60 @@
+{{- include "universal-chart.validate" . }}
+{{- if eq .Values.workload.type "statefulset" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "universal-chart.fullname" . }}
+  labels:
+    {{- include "universal-chart.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "universal-chart.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
+  podManagementPolicy: {{ .Values.podManagementPolicy | default "OrderedReady" }}
+  selector:
+    matchLabels:
+      {{- include "universal-chart.selectorLabels" . | nindent 6 }}
+  {{- with .Values.strategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "universal-chart.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "universal-chart.checksumAnnotations" . | nindent 8 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "universal-chart.podSpec" . | nindent 6 }}
+  {{- with .Values.volumeClaimTemplates }}
+  volumeClaimTemplates:
+    {{- range . }}
+    - metadata:
+        name: {{ .name }}
+        {{- with .annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .accessModes | nindent 10 }}
+        {{- with .storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        volumeMode: {{ .volumeMode | default "Filesystem" }}
+        resources:
+          requests:
+            storage: {{ .size }}
+    {{- end }}
+  {{- end }}
+{{- end }}

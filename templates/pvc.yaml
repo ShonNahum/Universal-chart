@@ -1,0 +1,22 @@
+{{- range .Values.pvc }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "universal-chart.labels" $ | nindent 4 }}
+  {{- with merge ($.Values.commonAnnotations | default dict) (.annotations | default dict) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .accessModes | nindent 4 }}
+  {{- with .storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .size }}
+{{- end }}

@@ -35,6 +35,7 @@ A practical reference for every feature with real-world examples.
 28. [RBAC](#28-rbac)
 29. [ServiceMonitor (Prometheus)](#29-servicemonitor)
 30. [extraDeploy — Raw YAML](#30-extradeploy)
+31. [Container Restart Rules (K8s 1.35+)](#31-container-restart-rules)
 
 ---
 
@@ -1442,3 +1443,90 @@ extraDeploy:
                 labels:
                   app.kubernetes.io/name: "?*"
 ```
+
+---
+
+## 31. Container Restart Rules
+
+> **Requires**: Kubernetes 1.35+ with feature gate `RestartAllContainersOnContainerExits` enabled (alpha).
+
+In-place pod restart — all containers restart without deleting/recreating the pod. Preserves pod UID, IP, network namespace, sandbox, and all volumes (emptyDir + PVC).
+
+### Java app with C++ sidecar — restart all on segfault (exit code 139)
+
+A C++ sidecar crashes with SIGSEGV (exit code 139). An in-place restart re-runs the init container to re-fetch the OpenTelemetry Java agent, then restarts both the Java app and the sidecar — without losing the pod's IP or rescheduling:
+
+```yaml
+restartPolicy: Never
+
+initContainers:
+  - name: otel-agent
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.14.0
+    command: ["cp", "/javaagent.jar", "/otel/javaagent.jar"]
+    volumeMounts:
+      - name: otel
+        mountPath: /otel
+
+image:
+  repository: my-registry/java-app
+  tag: "3.1"
+
+env:
+  - name: JAVA_TOOL_OPTIONS
+    value: "-javaagent:/otel/javaagent.jar"
+
+sidecars:
+  - name: native-processor
+    image: my-registry/cpp-processor:1.0
+    containerRestartRules:
+      - exitCode: 139
+        action: RestartAllContainers
+
+volumeMounts:
+  - name: otel
+    mountPath: /otel
+    readOnly: true
+
+volumes:
+  - name: otel
+    emptyDir: {}
+```
+
+### What happens on restart
+
+1. All running containers are terminated
+2. Init containers re-run **in order** (fresh initialization)
+3. Sidecar and regular containers restart
+4. Ephemeral containers are terminated
+5. Pod UID, IP, network namespace, and all volumes are preserved
+
+### Main container restart rule
+
+The top-level `containerRestartRules` key applies to the **main container**:
+
+```yaml
+containerRestartRules:
+  - exitCode: 137
+    action: RestartAllContainers
+```
+
+> **Note**: For sidecars and init containers, include `containerRestartRules` directly in the container spec (passed through as-is).
+
+### Common exit codes reference
+
+| Exit Code | Signal | Meaning |
+|---|---|---|
+| 1 | — | General error (application-defined) |
+| 2 | — | Misuse of shell command / invalid arguments |
+| 126 | — | Command not executable (permission denied) |
+| 127 | — | Command not found |
+| 128 | — | Invalid exit argument |
+| 130 | SIGINT | Interrupted (Ctrl+C) |
+| 131 | SIGQUIT | Quit (core dump) |
+| 134 | SIGABRT | Aborted (e.g. `assert()` failure) |
+| 137 | SIGKILL | Killed (OOMKilled or `kill -9`) |
+| 139 | SIGSEGV | Segmentation fault |
+| 141 | SIGPIPE | Broken pipe |
+| 143 | SIGTERM | Terminated gracefully |
+
+> Exit codes 128+N indicate the process was killed by signal N.

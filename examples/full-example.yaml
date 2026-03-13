@@ -30,6 +30,11 @@ volumeMounts:
   - name: data
     mountPath: /var/lib/postgresql/data
 
+# Container Restart Rules (K8s 1.35+) — restart all on OOMKilled
+containerRestartRules:
+  - exitCode: 137
+    action: RestartAllContainers
+
 # StatefulSet volumeClaimTemplates
 volumeClaimTemplates:
   - name: data

@@ -418,6 +418,9 @@ sidecars:
   - name: vault-agent
     image: vault:1.15.4
     args: ["agent", "-config=/etc/vault/agent.hcl"]
+    containerRestartRules:
+      - exitCode: 139
+        action: RestartAllContainers
     volumeMounts:
       - name: projected-vol
         mountPath: /var/run/secrets/tokens

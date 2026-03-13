@@ -55,6 +55,25 @@
     "livenessProbe":         { "type": "object" },
     "readinessProbe":        { "type": "object" },
     "startupProbe":          { "type": "object" },
+    "containerRestartRules": {
+      "type": "array",
+      "description": "Container restart rules (K8s 1.35+, alpha). Triggers in-place pod restart on specific exit codes.",
+      "items": {
+        "type": "object",
+        "required": ["exitCode", "action"],
+        "properties": {
+          "exitCode": {
+            "type": "integer",
+            "description": "Exit code that triggers the action"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["RestartAllContainers"],
+            "description": "Action to take when the exit code matches"
+          }
+        }
+      }
+    },
     "lifecycle":             { "type": "object" },
     "volumeMounts":          { "type": "array" },
     "volumeDevices":         { "type": "array" },

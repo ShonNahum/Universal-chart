@@ -93,6 +93,7 @@ workload:
 | PodDisruptionBudget | `pdb.enabled: true` |
 | Prometheus scraping | `serviceMonitor.enabled: true` |
 | OpenShift Route | `route.enabled: true` |
+| Container Restart Rules (K8s 1.35+) | `containerRestartRules[]` |
 | Anything else | `extraDeploy[]` |
 
 ## extraDeploy — Raw YAML Injection

@@ -170,6 +170,11 @@ MAIN CONTAINER — all possible container spec fields
     {{- toYaml . | nindent 4 }}
   {{- end }}
 
+  {{- with .Values.containerRestartRules }}
+  containerRestartRules:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
   {{- with .Values.lifecycle }}
   lifecycle:
     {{- toYaml . | nindent 4 }}

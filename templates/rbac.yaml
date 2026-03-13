@@ -5,6 +5,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "universal-chart.labels" $ | nindent 4 }}
 rules:
@@ -18,6 +19,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "universal-chart.labels" $ | nindent 4 }}
 roleRef:

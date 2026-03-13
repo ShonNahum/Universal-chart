@@ -15,11 +15,20 @@ spec:
   concurrencyPolicy: {{ .concurrencyPolicy | default "Forbid" }}
   successfulJobsHistoryLimit: {{ .successfulJobsHistoryLimit | default 3 }}
   failedJobsHistoryLimit: {{ .failedJobsHistoryLimit | default 1 }}
+  {{- if hasKey . "suspend" }}
+  suspend: {{ .suspend }}
+  {{- end }}
+  {{- with .startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ . }}
+  {{- end }}
   jobTemplate:
     spec:
       backoffLimit: {{ .jobTemplate.backoffLimit | default 3 }}
       {{- with .jobTemplate.activeDeadlineSeconds }}
       activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      {{- with .jobTemplate.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
       {{- end }}
       template:
         metadata:

@@ -11,7 +11,9 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  host: {{ .host | default "" }}
+  {{- with .host }}
+  host: {{ . }}
+  {{- end }}
   {{- with .path }}
   path: {{ . }}
   {{- end }}
@@ -26,13 +28,20 @@ spec:
     termination: {{ .tls.termination | default "edge" }}
     insecureEdgeTerminationPolicy: {{ .tls.insecureEdgeTerminationPolicy | default "Redirect" }}
     {{- with .tls.certificate }}
-    certificate: {{ . }}
+    certificate: |
+      {{- . | nindent 6 }}
     {{- end }}
     {{- with .tls.key }}
-    key: {{ . }}
+    key: |
+      {{- . | nindent 6 }}
     {{- end }}
     {{- with .tls.caCertificate }}
-    caCertificate: {{ . }}
+    caCertificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .tls.destinationCACertificate }}
+    destinationCACertificate: |
+      {{- . | nindent 6 }}
     {{- end }}
   {{- end }}
   wildcardPolicy: {{ .wildcardPolicy | default "None" }}

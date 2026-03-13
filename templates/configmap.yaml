@@ -13,6 +13,12 @@ metadata:
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+{{- with .data }}
 data:
-  {{- toYaml .data | nindent 2 }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .binaryData }}
+binaryData:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}

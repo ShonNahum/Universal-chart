@@ -517,6 +517,9 @@ overhead: {}
 # cpu: "250m"
 # memory: "128Mi"
 
+# Grace period for pod shutdown before SIGKILL (default: 30s)
+terminationGracePeriodSeconds: 30
+
 # ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
@@ -531,15 +534,17 @@ service:
       # nodePort: 30080    # for NodePort/LoadBalancer
   annotations: {}
   labels: {}
-  # clusterIP: None           # headless service (required for StatefulSet DNS)
-  # externalName: my.db.example.com
+  # clusterIP: None                    # headless service (required for StatefulSet DNS)
+  # externalName: my.db.example.com    # for ExternalName type — selector is omitted automatically
   # loadBalancerIP: ""
-  # externalTrafficPolicy: Cluster
-  # sessionAffinity: ClientIP
+  # loadBalancerSourceRanges: []       # restrict LB access by CIDR, e.g. ["10.0.0.0/8"]
+  # externalIPs: []                    # list of external IPs routed to this service
+  # externalTrafficPolicy: Cluster     # Cluster | Local
+  # sessionAffinity: ClientIP          # None | ClientIP
   # sessionAffinityConfig:
   #   clientIP:
   #     timeoutSeconds: 10800
-  # publishNotReadyAddresses: false    # for StatefulSet headless service
+  # publishNotReadyAddresses: false    # for StatefulSet headless service — include not-ready pods
 
 # ---------------------------------------------------------------------------
 # Ingress (standard Kubernetes — use route: for OpenShift)

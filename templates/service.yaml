@@ -17,11 +17,32 @@ spec:
   {{- with .Values.service.clusterIP }}
   clusterIP: {{ . }}
   {{- end }}
+  {{- with .Values.service.externalName }}
+  externalName: {{ . }}
+  {{- end }}
   {{- with .Values.service.loadBalancerIP }}
   loadBalancerIP: {{ . }}
   {{- end }}
+  {{- with .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with .Values.service.externalTrafficPolicy }}
   externalTrafficPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.service.sessionAffinity }}
+  sessionAffinity: {{ . }}
+  {{- end }}
+  {{- with .Values.service.sessionAffinityConfig }}
+  sessionAffinityConfig:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if hasKey .Values.service "publishNotReadyAddresses" }}
+  publishNotReadyAddresses: {{ .Values.service.publishNotReadyAddresses }}
+  {{- end }}
+  {{- with .Values.service.externalIPs }}
+  externalIPs:
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   ports:
     {{- range .Values.service.ports }}
@@ -33,6 +54,8 @@ spec:
       nodePort: {{ . }}
       {{- end }}
     {{- end }}
+  {{- if ne .Values.service.type "ExternalName" }}
   selector:
     {{- include "universal-chart.selectorLabels" . | nindent 4 }}
+  {{- end }}
 {{- end }}

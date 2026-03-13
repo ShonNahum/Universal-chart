@@ -712,17 +712,34 @@ service:
 # LoadBalancer — cloud provider creates an LB
 service:
   type: LoadBalancer
+  loadBalancerSourceRanges:
+    - 10.0.0.0/8       # restrict to internal network only
   ports:
     - name: https
       port: 443
       targetPort: https
 
+# ExternalName — CNAME alias to an external DNS name (no selector rendered)
+service:
+  type: ExternalName
+  externalName: my.database.example.com
+
 # Headless — for StatefulSet DNS (pod-0.myapp, pod-1.myapp, ...)
 service:
   type: ClusterIP
   clusterIP: None
-  publishNotReadyAddresses: true    # include not-ready pods in DNS
+  publishNotReadyAddresses: true    # include not-ready pods in DNS (required for DB clusters)
+
+# Session affinity — sticky sessions routed to the same pod
+service:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800   # 3 hours
 ```
+
+> **ExternalName note**: The `selector` field is automatically **omitted** for `ExternalName` services — Kubernetes rejects it otherwise.
 
 ---
 
@@ -770,7 +787,7 @@ ingress:
 # Edge — TLS terminates at the router, HTTP to your pod
 route:
   enabled: true
-  host: myapp.apps.cluster.example.com   # or empty for auto-assign
+  host: myapp.apps.cluster.example.com   # omit (leave "") for OpenShift auto-assign
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect   # force HTTPS
@@ -780,7 +797,7 @@ route:
   enabled: true
   tls:
     termination: passthrough
-    # no certificate here — pod handles it
+    # no certificate here — pod handles it entirely
 
 # Reencrypt — TLS from client to router, then NEW TLS from router to pod
 route:
@@ -791,7 +808,28 @@ route:
       -----BEGIN CERTIFICATE-----
       ...your pod's CA cert...
       -----END CERTIFICATE-----
+
+# Custom certificate on the route (edge or reencrypt)
+route:
+  enabled: true
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    certificate: |
+      -----BEGIN CERTIFICATE-----
+      ...PEM cert...
+      -----END CERTIFICATE-----
+    key: |
+      -----BEGIN RSA PRIVATE KEY-----
+      ...PEM key...
+      -----END RSA PRIVATE KEY-----
+    caCertificate: |
+      -----BEGIN CERTIFICATE-----
+      ...intermediate CA...
+      -----END CERTIFICATE-----
 ```
+
+> **Auto-assign hostname**: Leave `host: ""` (empty string) and OpenShift will generate a hostname automatically. The `host` field is **omitted** from the manifest in that case — setting it to `""` explicitly would be invalid.
 
 ---
 
@@ -803,6 +841,10 @@ Multiple ConfigMaps, each with their own data:
 configMaps:
   # App config as key-value
   - name: app-config
+    annotations:
+      description: "Main app configuration"
+    labels:
+      config-type: app
     data:
       LOG_LEVEL: info
       MAX_CONNECTIONS: "100"
@@ -822,7 +864,12 @@ configMaps:
           }
         }
 
-  # Multiple files
+  # Binary data (pre-base64-encoded — for certs, keystores, etc.)
+  - name: tls-bundle
+    binaryData:
+      ca-bundle.crt: <base64-encoded-binary>
+
+  # Mixed: both text data and binary data in the same ConfigMap
   - name: app-scripts
     data:
       start.sh: |
@@ -832,7 +879,11 @@ configMaps:
       healthcheck.sh: |
         #!/bin/bash
         curl -f http://localhost:8080/health
+    binaryData:
+      logo.png: <base64-encoded-binary>
 ```
+
+> A ConfigMap can have `data`, `binaryData`, or both — all are optional. The template handles nil gracefully.
 
 ---
 
@@ -877,11 +928,26 @@ pvc:
     accessModes: [ReadWriteOnce]    # one pod can write
     size: 100Gi
     storageClassName: fast-ssd
+    volumeMode: Filesystem          # Filesystem (default) | Block
 
   - name: shared-data
     accessModes: [ReadWriteMany]    # multiple pods can write (NFS/Ceph)
     size: 500Gi
     storageClassName: cephfs
+
+  # Bind to a specific PV by name
+  - name: static-bound
+    accessModes: [ReadWriteOnce]
+    size: 50Gi
+    volumeName: my-manually-created-pv   # binds only to this exact PV
+
+  # Bind to a specific PV by label selector
+  - name: label-selected
+    accessModes: [ReadWriteOnce]
+    size: 50Gi
+    selector:
+      matchLabels:
+        storage-tier: gold
 
   # Clone from a snapshot
   - name: restored-data
@@ -892,6 +958,8 @@ pvc:
       kind: VolumeSnapshot
       apiGroup: snapshot.storage.k8s.io
 ```
+
+> `volumeMode: Block` skips filesystem formatting — the app gets a raw block device. Requires the PVC and the pod's `volumeDevices` (not `volumeMounts`).
 
 ---
 
@@ -1000,13 +1068,17 @@ volumeMounts:
 cronjobs:
   # Daily DB backup at 2am
   - name: db-backup
-    schedule: "0 2 * * *"     # min hour day month weekday
-    concurrencyPolicy: Forbid  # don't run if previous still running
+    schedule: "0 2 * * *"             # min hour day month weekday
+    concurrencyPolicy: Forbid         # Allow | Forbid | Replace
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 1
+    suspend: false                    # set true to pause without deleting
+    startingDeadlineSeconds: 300      # fail if not started within 5 min of scheduled time
     jobTemplate:
       restartPolicy: OnFailure
       backoffLimit: 3
+      activeDeadlineSeconds: 3600     # kill the job after 1 hour
+      ttlSecondsAfterFinished: 86400  # auto-delete finished job after 24h
       command: ["/bin/sh", "-c", "pg_dump $DATABASE_URL | gzip > /backup/$(date +%Y%m%d).sql.gz"]
       env:
         - name: DATABASE_URL
@@ -1022,11 +1094,15 @@ cronjobs:
   # Every 5 minutes — clean expired sessions
   - name: session-cleanup
     schedule: "*/5 * * * *"
-    concurrencyPolicy: Replace   # replace the running job with the new one
+    concurrencyPolicy: Replace        # replace the running job with the new one
+    suspend: false
     jobTemplate:
       restartPolicy: Never
+      ttlSecondsAfterFinished: 600    # auto-delete after 10 minutes
       command: ["python", "manage.py", "clearsessions"]
 ```
+
+> `suspend: true` pauses the schedule without deleting the CronJob — useful for maintenance windows. `startingDeadlineSeconds` protects against missed-schedule pile-ups on cluster restart.
 
 ---
 
@@ -1211,10 +1287,13 @@ serviceAccount:
     openshift.io/sa.scc.uid-range: "1000/10000"
     # AWS: IRSA (IAM Roles for Service Accounts)
     eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/myapp-role
+    # GCP Workload Identity
+    iam.gke.io/gcp-service-account: myapp@project.iam.gserviceaccount.com
 
 rbac:
   roles:
     - name: myapp-role
+      # namespace is set automatically to .Release.Namespace — no need to specify it
       rules:
         - apiGroups: [""]
           resources: ["configmaps", "secrets"]
@@ -1225,13 +1304,14 @@ rbac:
 
   roleBindings:
     - name: myapp-rolebinding
-      roleRef: myapp-role
+      roleRef: myapp-role   # name of the Role above
+      # namespace is set automatically to .Release.Namespace
       subjects:
         - kind: ServiceAccount
           name: myapp-sa
           namespace: myapp-dev
 
-  # Cluster-wide read (e.g. for an operator)
+  # Cluster-wide read (e.g. for an operator) — no namespace field (cluster-scoped)
   clusterRoles:
     - name: myapp-cluster-reader
       rules:
@@ -1241,12 +1321,14 @@ rbac:
 
   clusterRoleBindings:
     - name: myapp-cluster-rb
-      roleRef: myapp-cluster-reader
+      roleRef: myapp-cluster-reader   # name of the ClusterRole above
       subjects:
         - kind: ServiceAccount
           name: myapp-sa
           namespace: myapp-dev
 ```
+
+> **Namespace behaviour**: `Role` and `RoleBinding` are automatically created in `{{ .Release.Namespace }}`. `ClusterRole` and `ClusterRoleBinding` are cluster-scoped and have no namespace.
 
 ---
 
@@ -1263,19 +1345,31 @@ ports:
 
 serviceMonitor:
   enabled: true
-  port: metrics          # must match a service port name
+  namespace: monitoring      # namespace where the ServiceMonitor is created (default: Release.Namespace)
+  port: metrics              # must match a service port name
   path: /metrics
   interval: 30s
   scrapeTimeout: 10s
+  scheme: http               # http (default) | https
   labels:
-    prometheus: kube-prometheus   # must match your Prometheus operator selector
+    release: prometheus      # must match your Prometheus operator selector
 
-  # Add labels to metrics
+  # mTLS scraping (when scheme: https)
+  tlsConfig:
+    insecureSkipVerify: true  # or provide ca/cert/key
+    # ca:
+    #   secret:
+    #     name: prometheus-tls
+    #     key: ca.crt
+
+  # Re-label metrics (add/rename labels)
   relabelings:
     - sourceLabels: [__meta_kubernetes_pod_name]
       targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_pod_label_version]
+      targetLabel: version
 
-  # Drop metrics you don't need
+  # Filter/transform metrics after scrape
   metricRelabelings:
     - sourceLabels: [__name__]
       regex: go_.*              # drop all Go runtime metrics

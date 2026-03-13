@@ -16,6 +16,18 @@ spec:
   {{- with .storageClassName }}
   storageClassName: {{ . }}
   {{- end }}
+  volumeMode: {{ .volumeMode | default "Filesystem" }}
+  {{- with .volumeName }}
+  volumeName: {{ . }}
+  {{- end }}
+  {{- with .selector }}
+  selector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .dataSource }}
+  dataSource:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .size }}

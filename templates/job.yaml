@@ -18,6 +18,9 @@ spec:
   {{- with .activeDeadlineSeconds }}
   activeDeadlineSeconds: {{ . }}
   {{- end }}
+  {{- with .ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
   template:
     metadata:
       labels:

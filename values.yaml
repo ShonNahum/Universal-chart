@@ -932,6 +932,12 @@ vpa:
   #     controlledResources: [cpu, memory]
 
 # ---------------------------------------------------------------------------
+# Checksums — opt-in auto-restart pods when ConfigMaps or Secrets change
+# ---------------------------------------------------------------------------
+checksums:
+  enabled: false   # set to true to add checksum annotations → pods restart on CM/Secret change
+
+# ---------------------------------------------------------------------------
 # Raw YAML injection — full Helm templating supported via tpl
 # ---------------------------------------------------------------------------
 extraDeploy: []

@@ -73,11 +73,13 @@ Usage: add to pod annotations:
     {{- include "universal-chart.checksumAnnotations" . | nindent 8 }}
 */}}
 {{- define "universal-chart.checksumAnnotations" -}}
+{{- if .Values.checksums.enabled }}
 {{- if .Values.configMaps }}
 checksum/configmaps: {{ .Values.configMaps | toYaml | sha256sum }}
 {{- end }}
 {{- if .Values.secrets }}
 checksum/secrets: {{ .Values.secrets | toYaml | sha256sum }}
+{{- end }}
 {{- end }}
 {{- end }}
 

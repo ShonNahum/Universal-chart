@@ -1,16 +1,17 @@
 # universal-chart
 
-A generic, modular Helm chart for deploying **any** application. Configure everything through `values.yaml` — no app-specific templates needed.
+A generic, modular Helm chart for deploying **any** application to Kubernetes or OpenShift. Configure everything through `values.yaml` — no app-specific templates needed.
 
 ## Structure
 
 ```
 universal-chart/
 ├── Chart.yaml
-├── values.yaml                  # All options, fully documented
+├── values.yaml                  # All options, fully documented with examples
+├── values.schema.json           # JSON Schema validation
 ├── templates/
-│   ├── _helpers.tpl             # Name/label helpers
-│   ├── _pod-spec.tpl            # Shared pod spec (DRY)
+│   ├── _helpers.tpl             # Name/label/checksum helpers
+│   ├── _pod-spec.tpl            # Shared pod spec (DRY across workloads)
 │   ├── deployment.yaml          # workload.type: deployment
 │   ├── statefulset.yaml         # workload.type: statefulset
 │   ├── daemonset.yaml           # workload.type: daemonset
@@ -20,8 +21,11 @@ universal-chart/
 │   ├── configmap.yaml           # loops over .Values.configMaps[]
 │   ├── secret.yaml              # loops over .Values.secrets[]
 │   ├── pvc.yaml                 # loops over .Values.pvc[]
+│   ├── pv.yaml                  # loops over .Values.persistentVolumes[]
+│   ├── storageclass.yaml        # loops over .Values.storageClasses[]
 │   ├── serviceaccount.yaml
 │   ├── hpa.yaml
+│   ├── vpa.yaml
 │   ├── pdb.yaml
 │   ├── networkpolicy.yaml       # loops over .Values.networkPolicies[]
 │   ├── rbac.yaml                # Role, RoleBinding, ClusterRole, CRB
@@ -31,7 +35,9 @@ universal-chart/
 │   └── extra-deploy.yaml        # Raw YAML injection via tpl
 └── examples/
     ├── simple-webapp.yaml
-    ├── full-example.yaml
+    ├── full-example.yaml        # Everything-on example (StatefulSet + all features)
+    ├── app1-fullstack-webapp.yaml
+    ├── app2-postgres-statefulset.yaml
     └── 3-apps-usage.yaml        # 3-app ArgoCD ApplicationSet pattern
 ```
 
@@ -54,16 +60,22 @@ service:
       port: 80
       targetPort: http
 
-# OpenShift Route
-route:
-  enabled: true
-  host: myapp.apps.cluster.example.com
-  tls:
-    termination: edge
-
-# OR standard Ingress
+# Standard Kubernetes Ingress
 ingress:
-  enabled: false
+  enabled: true
+  className: nginx
+  hosts:
+    - host: myapp.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+# OR OpenShift Route
+# route:
+#   enabled: true
+#   host: myapp.apps.cluster.example.com
+#   tls:
+#     termination: edge
 ```
 
 ## Workload Types
@@ -79,7 +91,7 @@ workload:
 
 | Feature | Values Key |
 |---|---|
-| Sidecar containers | `extraContainers[]` |
+| Sidecar containers | `sidecars[]` |
 | Init containers | `initContainers[]` |
 | Multiple ConfigMaps | `configMaps[]` |
 | Multiple Secrets | `secrets[]` |
@@ -90,11 +102,46 @@ workload:
 | One-off Jobs | `jobs[]` |
 | RBAC | `rbac.roles[]`, `rbac.clusterRoles[]` |
 | HPA | `hpa.enabled: true` |
+| VPA | `vpa.enabled: true` |
 | PodDisruptionBudget | `pdb.enabled: true` |
 | Prometheus scraping | `serviceMonitor.enabled: true` |
 | OpenShift Route | `route.enabled: true` |
-| Container Restart Rules (K8s 1.35+) | `containerRestartRules[]` |
+| Pod anti-affinity | `affinity.podAntiAffinity` |
+| Topology spread | `topologySpreadConstraints[]` |
+| Auto-restart on CM/Secret change | `checksums.enabled: true` |
 | Anything else | `extraDeploy[]` |
+
+## Pod Anti-Affinity (StatefulSet & Deployment)
+
+Spread pods across nodes to avoid single points of failure:
+
+```yaml
+affinity:
+  podAntiAffinity:
+    # Soft rule — prefer different nodes (recommended)
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: myapp
+          topologyKey: kubernetes.io/hostname
+    # Hard rule — REQUIRE different nodes (can block scheduling if not enough nodes)
+    # requiredDuringSchedulingIgnoredDuringExecution:
+    #   - labelSelector:
+    #       matchLabels:
+    #         app.kubernetes.io/name: myapp
+    #     topologyKey: kubernetes.io/hostname
+```
+
+## Checksums — Opt-in Pod Restart on Config Change
+
+By default pods do **NOT** restart when a ConfigMap or Secret changes. To enable:
+
+```yaml
+checksums:
+  enabled: true   # adds checksum annotations → rolling restart when CM/Secret changes
+```
 
 ## extraDeploy — Raw YAML Injection
 
@@ -126,3 +173,13 @@ See [`examples/3-apps-usage.yaml`](examples/3-apps-usage.yaml) for a complete ex
 - **worker** — CronJob + no Service + extraDeploy
 
 Each app has its own `values.yaml` in the gitops `apps` repo. The `ApplicationSet` auto-generates an Argo CD Application per directory.
+
+## Validation
+
+```bash
+helm lint charts/universal-chart
+helm template test charts/universal-chart                                          # default values
+helm template test charts/universal-chart -f examples/full-example.yaml           # full-featured
+helm template test charts/universal-chart -f examples/app1-fullstack-webapp.yaml  # deployment
+helm template test charts/universal-chart -f examples/app2-postgres-statefulset.yaml  # statefulset
+```

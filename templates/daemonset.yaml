@@ -11,7 +11,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       {{- include "universal-chart.selectorLabels" . | nindent 6 }}

@@ -1,4 +1,7 @@
-# Full-featured example: StatefulSet with PVC, ConfigMap, Secret, CronJob, RBAC, extraDeploy
+# Full-featured example — exercises every chart feature
+# Tests: StatefulSet, volumeClaimTemplates, headless service, ConfigMaps, Secrets,
+#        RBAC, CronJob, NetworkPolicy, ServiceMonitor, VPA, PDB, HPA (disabled for STS),
+#        podAntiAffinity, checksums, extraDeploy, initContainers, sidecars
 
 workload:
   type: statefulset
@@ -6,106 +9,453 @@ workload:
 image:
   repository: postgres
   tag: "16"
+  pullPolicy: IfNotPresent
 
 replicaCount: 3
+revisionHistoryLimit: 3
+podManagementPolicy: OrderedReady
 
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    partition: 0
+
+# ---------------------------------------------------------------------------
+# Pod metadata
+# ---------------------------------------------------------------------------
+podAnnotations:
+  reloader.stakater.com/auto: "true"
+
+podLabels:
+  tier: database
+
+# ---------------------------------------------------------------------------
+# Security contexts
+# ---------------------------------------------------------------------------
+podSecurityContext:
+  fsGroup: 999
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 999
+  capabilities:
+    drop: [ALL]
+
+# ---------------------------------------------------------------------------
+# Main container
+# ---------------------------------------------------------------------------
 ports:
   - name: postgres
     containerPort: 5432
+    protocol: TCP
 
 env:
   - name: POSTGRES_DB
-    value: mydb
+    valueFrom:
+      configMapKeyRef:
+        name: pg-config
+        key: POSTGRES_DB
+  - name: POSTGRES_USER
+    valueFrom:
+      secretKeyRef:
+        name: pg-secret
+        key: POSTGRES_USER
   - name: POSTGRES_PASSWORD
     valueFrom:
       secretKeyRef:
         name: pg-secret
-        key: password
+        key: POSTGRES_PASSWORD
+  - name: PGDATA
+    value: /var/lib/postgresql/data/pgdata
 
 envFrom:
   - configMapRef:
       name: pg-config
 
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2
+    memory: 2Gi
+
+livenessProbe:
+  exec:
+    command: ["/bin/sh", "-c", "pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)"]
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+readinessProbe:
+  exec:
+    command: ["/bin/sh", "-c", "pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)"]
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "pg_ctl stop -D $PGDATA -m fast"]
+
+terminationGracePeriodSeconds: 60
+
+# ---------------------------------------------------------------------------
+# Volume mounts
+# ---------------------------------------------------------------------------
 volumeMounts:
   - name: data
     mountPath: /var/lib/postgresql/data
+  - name: config-vol
+    mountPath: /etc/postgresql/conf.d
+    readOnly: true
+  - name: tmp-dir
+    mountPath: /tmp
 
-# Container Restart Rules (K8s 1.35+) — restart all on OOMKilled
-containerRestartRules:
-  - exitCode: 137
-    action: RestartAllContainers
+volumes:
+  - name: config-vol
+    configMap:
+      name: pg-config
+      items:
+        - key: postgresql.conf
+          path: custom.conf
+  - name: tmp-dir
+    emptyDir: {}
 
-# StatefulSet volumeClaimTemplates
+# ---------------------------------------------------------------------------
+# StatefulSet volumeClaimTemplates (one PVC per pod)
+# ---------------------------------------------------------------------------
 volumeClaimTemplates:
   - name: data
     accessModes: [ReadWriteOnce]
     size: 20Gi
     storageClassName: fast-ssd
+    volumeMode: Filesystem
 
+# ---------------------------------------------------------------------------
+# Init containers
+# ---------------------------------------------------------------------------
+initContainers:
+  - name: init-permissions
+    image: busybox:1.36
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /var/lib/postgresql/data/pgdata
+        chown -R 999:999 /var/lib/postgresql/data
+    securityContext:
+      runAsUser: 0
+      runAsNonRoot: false
+    volumeMounts:
+      - name: data
+        mountPath: /var/lib/postgresql/data
+    resources:
+      requests:
+        cpu: 50m
+        memory: 32Mi
+
+# ---------------------------------------------------------------------------
+# Sidecars
+# ---------------------------------------------------------------------------
+sidecars:
+  - name: metrics-exporter
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    env:
+      - name: DATA_SOURCE_USER
+        valueFrom:
+          secretKeyRef:
+            name: pg-secret
+            key: POSTGRES_USER
+      - name: DATA_SOURCE_PASS
+        valueFrom:
+          secretKeyRef:
+            name: pg-secret
+            key: POSTGRES_PASSWORD
+      - name: DATA_SOURCE_URI
+        value: "localhost:5432/$(POSTGRES_DB)?sslmode=disable"
+    ports:
+      - name: metrics
+        containerPort: 9187
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Scheduling — podAntiAffinity keeps each replica on a different node
+# ---------------------------------------------------------------------------
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations:
+  - key: "database"
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+affinity:
+  podAntiAffinity:
+    # HARD: Require each postgres pod on a different node
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: full-example
+        topologyKey: kubernetes.io/hostname
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: full-example
+
+# ---------------------------------------------------------------------------
+# Checksums — opt-in: restart pods when ConfigMaps/Secrets change
+# ---------------------------------------------------------------------------
+checksums:
+  enabled: false   # pods will rolling-restart when pg-config or pg-secret changes
+
+# ---------------------------------------------------------------------------
+# Service — headless for stable StatefulSet DNS
+# ---------------------------------------------------------------------------
+service:
+  enabled: true
+  type: ClusterIP
+  clusterIP: None   # headless — required for StatefulSet stable DNS (pod-0.pg, pod-1.pg …)
+  publishNotReadyAddresses: true
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+
+ingress:
+  enabled: false
+
+route:
+  enabled: false
+
+# ---------------------------------------------------------------------------
 # ConfigMaps
+# ---------------------------------------------------------------------------
 configMaps:
   - name: pg-config
     data:
-      POSTGRES_HOST: localhost
-      pg.conf: |
+      POSTGRES_DB: myapp
+      postgresql.conf: |
         max_connections = 200
         shared_buffers = 256MB
+        effective_cache_size = 768MB
+        log_timezone = 'UTC'
+        timezone = 'UTC'
 
+# ---------------------------------------------------------------------------
 # Secrets
+# ---------------------------------------------------------------------------
 secrets:
   - name: pg-secret
+    type: Opaque
     stringData:
-      password: "supersecret"
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: "supersecret-change-in-production"
+      PGPASSWORD: "supersecret-change-in-production"
 
+# ---------------------------------------------------------------------------
 # ServiceAccount with RBAC
+# ---------------------------------------------------------------------------
 serviceAccount:
   create: true
-  name: postgres-sa
+  name: ""
+  automountServiceAccountToken: false
 
 rbac:
   roles:
-    - name: postgres-role
+    - name: pg-secret-reader
       rules:
         - apiGroups: [""]
-          resources: ["pods", "configmaps"]
-          verbs: ["get", "list"]
+          resources: ["secrets"]
+          verbs: ["get"]
+          resourceNames: ["pg-secret"]
   roleBindings:
-    - name: postgres-rb
-      roleRef: postgres-role
+    - name: pg-secret-reader-rb
+      roleRef: pg-secret-reader
       subjects:
         - kind: ServiceAccount
-          name: postgres-sa
+          name: full-example-universal-chart
+          namespace: default
+  clusterRoles: []
+  clusterRoleBindings: []
 
-# CronJob for backups
-cronjobs:
-  - name: backup
-    schedule: "0 2 * * *"
-    concurrencyPolicy: Forbid
-    jobTemplate:
-      restartPolicy: OnFailure
-      command: ["/bin/sh", "-c", "pg_dump mydb > /backup/dump.sql"]
+# ---------------------------------------------------------------------------
+# HPA — disabled for StatefulSet with persistent storage
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: false
 
+# ---------------------------------------------------------------------------
+# PDB — keep at least 2 replicas up during disruptions
+# ---------------------------------------------------------------------------
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+# ---------------------------------------------------------------------------
+# VPA
+# ---------------------------------------------------------------------------
+vpa:
+  enabled: true
+  updateMode: Auto
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "full-example"
+        minAllowed:
+          cpu: 250m
+          memory: 256Mi
+        maxAllowed:
+          cpu: 4
+          memory: 8Gi
+        controlledResources: [cpu, memory]
+
+# ---------------------------------------------------------------------------
 # NetworkPolicy
+# ---------------------------------------------------------------------------
 networkPolicies:
-  - name: allow-app-ingress
-    podSelector: {}
-    policyTypes: [Ingress]
+  - name: allow-app-to-postgres
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: full-example
+    policyTypes: [Ingress, Egress]
     ingress:
       - from:
           - podSelector:
               matchLabels:
-                app: myapp
+                db-client: postgres
         ports:
-          - port: 5432
+          - protocol: TCP
+            port: 5432
+      - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: monitoring
+        ports:
+          - protocol: TCP
+            port: 9187
+    egress:
+      - ports:
+          - protocol: UDP
+            port: 53
 
-# Prometheus monitoring
+# ---------------------------------------------------------------------------
+# Prometheus ServiceMonitor
+# ---------------------------------------------------------------------------
 serviceMonitor:
   enabled: true
-  port: http
+  namespace: "monitoring"
+  labels:
+    release: prometheus
+  interval: 60s
+  scrapeTimeout: 30s
   path: /metrics
-  interval: 30s
+  port: metrics
+  scheme: http
 
-# extraDeploy — custom resource not in the chart
+# ---------------------------------------------------------------------------
+# CronJob — daily backup
+# ---------------------------------------------------------------------------
+cronjobs:
+  - name: pg-backup
+    schedule: "0 2 * * *"
+    concurrencyPolicy: Forbid
+    successfulJobsHistoryLimit: 7
+    failedJobsHistoryLimit: 3
+    jobTemplate:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      ttlSecondsAfterFinished: 86400
+      restartPolicy: OnFailure
+      image:
+        repository: postgres
+        tag: "16"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          pg_dump -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -Fc -f /tmp/dump.pgc
+          echo "Backup done"
+      env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pg-secret
+              key: PGPASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: pg-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: pg-config
+              key: POSTGRES_DB
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Job — one-shot DB health check
+# ---------------------------------------------------------------------------
+jobs:
+  - name: db-check
+    annotations:
+      argocd.argoproj.io/hook: PostSync
+      argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    backoffLimit: 5
+    activeDeadlineSeconds: 300
+    ttlSecondsAfterFinished: 3600
+    restartPolicy: OnFailure
+    image:
+      repository: postgres
+      tag: "16"
+    command:
+      - /bin/sh
+      - -c
+      - pg_isready -h postgres -U $POSTGRES_USER
+    envFrom:
+      - secretRef:
+          name: pg-secret
+      - configMapRef:
+          name: pg-config
+
+# ---------------------------------------------------------------------------
+# StorageClass
+# ---------------------------------------------------------------------------
+storageClasses:
+  - name: fast-ssd
+    provisioner: ebs.csi.aws.com
+    reclaimPolicy: Retain
+    volumeBindingMode: WaitForFirstConsumer
+    allowVolumeExpansion: true
+    parameters:
+      type: io2
+      iopsPerGB: "50"
+      encrypted: "true"
+
+# ---------------------------------------------------------------------------
+# extraDeploy — raw YAML, full Helm templating supported
+# ---------------------------------------------------------------------------
 extraDeploy:
   - |
     apiVersion: v1
@@ -113,6 +463,8 @@ extraDeploy:
     metadata:
       name: {{ .Release.Name }}-extra
       namespace: {{ .Release.Namespace }}
+      labels:
+        {{- include "universal-chart.labels" . | nindent 8 }}
     data:
-      custom-key: "I can put anything here"
-      release-name: "{{ .Release.Name }}"
+      RELEASE_NAME: {{ .Release.Name }}
+      CHART_VERSION: {{ .Chart.Version }}

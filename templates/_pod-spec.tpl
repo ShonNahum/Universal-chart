@@ -21,7 +21,7 @@ securityContext:
 {{- end }}
 
 {{- /* ── Termination & DNS ────────────────────────── */}}
-terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 30 }}
+terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
 {{- if .Values.hostNetwork }}
 hostNetwork: true
 {{- end }}

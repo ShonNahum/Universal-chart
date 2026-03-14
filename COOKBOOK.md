@@ -36,6 +36,8 @@ A practical reference for every feature with real-world examples.
 29. [ServiceMonitor (Prometheus)](#29-servicemonitor)
 30. [extraDeploy — Raw YAML](#30-extradeploy)
 31. [Container Restart Rules (K8s 1.35+)](#31-container-restart-rules)
+32. [Checksums — Opt-in Pod Restart on Config Change](#32-checksums)
+33. [StatefulSet Pod Anti-Affinity](#33-statefulset-pod-anti-affinity)
 
 ---
 
@@ -1530,3 +1532,95 @@ containerRestartRules:
 | 143 | SIGTERM | Terminated gracefully |
 
 > Exit codes 128+N indicate the process was killed by signal N.
+
+---
+
+## 32. Checksums
+
+By default, pods do **NOT** restart when a ConfigMap or Secret changes. Enable opt-in rolling restarts:
+
+```yaml
+checksums:
+  enabled: true   # adds SHA-256 annotation to pod template → triggers rolling restart on CM/Secret change
+```
+
+> **How it works**: When enabled, a `checksum/configmaps` and/or `checksum/secrets` annotation is added to the pod template. Kubernetes detects the annotation change and performs a rolling restart.
+
+### When to use
+
+| Scenario | Recommended |
+|---|---|
+| App reads config at startup only | ✅ Enable — ensures pods pick up new config |
+| App hot-reloads config via inotify / Reloader | ❌ Disable — pods would restart unnecessarily |
+| Databases / StatefulSets | ❌ Disable — unexpected restarts are dangerous |
+| Use Stakater Reloader instead | ❌ Disable — avoid double-restart |
+
+```yaml
+# Opt-in (disabled by default)
+checksums:
+  enabled: false   # change to true to enable
+```
+
+---
+
+## 33. StatefulSet Pod Anti-Affinity
+
+For StatefulSets, spreading replicas across nodes is critical for HA. The `affinity` key works identically for all workload types (Deployment, StatefulSet, DaemonSet).
+
+### Soft (preferred) — recommended for most StatefulSets
+
+Pods *prefer* different nodes but will schedule on the same node if needed:
+
+```yaml
+workload:
+  type: statefulset
+replicaCount: 3
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: myapp   # matches selector labels auto-set by chart
+          topologyKey: kubernetes.io/hostname
+```
+
+### Hard (required) — for mission-critical databases
+
+Pods *require* different nodes. **Warning**: if you have 3 replicas but only 2 nodes, `pod-2` will be `Pending` forever:
+
+```yaml
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: myapp
+        topologyKey: kubernetes.io/hostname
+```
+
+### Spread across both nodes AND availability zones
+
+```yaml
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: myapp
+          topologyKey: kubernetes.io/hostname   # different nodes
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone   # spread across AZs
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: myapp
+```
+
+> **Tip**: Use `app.kubernetes.io/name` in `matchLabels` — this is exactly what the chart sets as a selector label. The value equals your `nameOverride` or chart name.

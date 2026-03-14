@@ -201,6 +201,15 @@
         "metricRelabelings": { "type": "array" }
       }
     },
-    "extraDeploy": { "type": "array", "items": { "type": "string" } }
+    "extraDeploy": { "type": "array", "items": { "type": "string" } },
+    "checksums": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Set true to add checksum annotations and auto-restart pods when ConfigMaps or Secrets change" }
+      }
+    },
+    "restartPolicy":              { "type": "string" },
+    "terminationMessagePath":     { "type": "string" },
+    "terminationMessagePolicy":   { "type": "string", "enum": ["File", "FallbackToLogsOnError"] }
   }
 }

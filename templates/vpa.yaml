@@ -12,10 +12,10 @@ metadata:
 spec:
   targetRef:
     apiVersion: apps/v1
-    kind: {{ .Values.workload.type | title }}
+    kind: {{ index (dict "deployment" "Deployment" "statefulset" "StatefulSet" "daemonset" "DaemonSet") .Values.workload.type }}
     name: {{ include "universal-chart.fullname" . }}
   updatePolicy:
-    updateMode: {{ .Values.vpa.updateMode | default "Auto" }}
+    updateMode: {{ .Values.vpa.updateMode }}
   {{- with .Values.vpa.resourcePolicy }}
   resourcePolicy:
     {{- toYaml . | nindent 4 }}

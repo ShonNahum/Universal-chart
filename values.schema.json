@@ -14,8 +14,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["deployment", "statefulset", "daemonset"],
-          "description": "Workload kind to render"
+          "enum": ["deployment", "statefulset", "daemonset"]
         }
       }
     },
@@ -25,61 +24,37 @@
       "properties": {
         "repository": { "type": "string" },
         "tag":        { "type": "string" },
-        "pullPolicy": {
-          "type": "string",
-          "enum": ["Always", "IfNotPresent", "Never"]
-        }
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
       }
     },
     "replicaCount":          { "type": "integer", "minimum": 0 },
     "revisionHistoryLimit":  { "type": "integer", "minimum": 0 },
-    "podManagementPolicy": {
-      "type": "string",
-      "enum": ["OrderedReady", "Parallel"]
-    },
+    "podManagementPolicy":   { "type": "string", "enum": ["OrderedReady", "Parallel"] },
     "imagePullSecrets":      { "type": "array" },
     "podAnnotations":        { "type": "object" },
     "podLabels":             { "type": "object" },
     "podSecurityContext":    { "type": "object" },
     "securityContext":       { "type": "object" },
     "command":               { "type": "array", "items": { "type": "string" } },
-    "args":                  { "type": "array", "items": { "type": "string" } },
+    "args":                  { "type": "array" },
     "workingDir":            { "type": "string" },
     "stdin":                 { "type": "boolean" },
     "stdinOnce":             { "type": "boolean" },
     "tty":                   { "type": "boolean" },
-    "ports":                 { "type": "array" },
-    "env":                   { "type": "array" },
-    "envFrom":               { "type": "array" },
+    "ports":                 { "type": "object" },
+    "env":                   { "type": "object" },
+    "envFrom":               { "type": "object" },
     "resources":             { "type": "object" },
     "livenessProbe":         { "type": "object" },
     "readinessProbe":        { "type": "object" },
     "startupProbe":          { "type": "object" },
-    "containerRestartRules": {
-      "type": "array",
-      "description": "Container restart rules (K8s 1.35+, alpha). Triggers in-place pod restart on specific exit codes.",
-      "items": {
-        "type": "object",
-        "required": ["exitCode", "action"],
-        "properties": {
-          "exitCode": {
-            "type": "integer",
-            "description": "Exit code that triggers the action"
-          },
-          "action": {
-            "type": "string",
-            "enum": ["RestartAllContainers"],
-            "description": "Action to take when the exit code matches"
-          }
-        }
-      }
-    },
+    "containerRestartRules": { "type": "array" },
     "lifecycle":             { "type": "object" },
-    "volumeMounts":          { "type": "array" },
+    "volumeMounts":          { "type": "object" },
     "volumeDevices":         { "type": "array" },
-    "volumes":               { "type": "array" },
-    "initContainers":        { "type": "array" },
-    "sidecars":              { "type": "array" },
+    "volumes":               { "type": "object" },
+    "initContainers":        { "type": "object" },
+    "sidecars":              { "type": "object" },
     "nodeSelector":          { "type": "object" },
     "tolerations":           { "type": "array" },
     "affinity":              { "type": "object" },
@@ -101,11 +76,8 @@
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
-        "type": {
-          "type": "string",
-          "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
-        },
-        "ports": { "type": "array" },
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"] },
+        "ports": { "type": "object" },
         "annotations": { "type": "object" },
         "labels": { "type": "object" }
       }
@@ -129,14 +101,14 @@
         "tls": { "type": "object" }
       }
     },
-    "configMaps":  { "type": "array" },
-    "secrets":     { "type": "array" },
-    "pvc":         { "type": "array" },
-    "persistentVolumes": { "type": "array" },
-    "storageClasses":    { "type": "array" },
-    "volumeClaimTemplates": { "type": "array" },
-    "cronjobs":   { "type": "array" },
-    "jobs":       { "type": "array" },
+    "configMaps":            { "type": "object" },
+    "secrets":               { "type": "object" },
+    "pvc":                   { "type": "object" },
+    "persistentVolumes":     { "type": "object" },
+    "storageClasses":        { "type": "object" },
+    "volumeClaimTemplates":  { "type": "object" },
+    "cronjobs":              { "type": "object" },
+    "jobs":                  { "type": "object" },
     "serviceAccount": {
       "type": "object",
       "properties": {
@@ -149,10 +121,10 @@
     "rbac": {
       "type": "object",
       "properties": {
-        "roles":               { "type": "array" },
-        "roleBindings":        { "type": "array" },
-        "clusterRoles":        { "type": "array" },
-        "clusterRoleBindings": { "type": "array" }
+        "roles":               { "type": "object" },
+        "roleBindings":        { "type": "object" },
+        "clusterRoles":        { "type": "object" },
+        "clusterRoleBindings": { "type": "object" }
       }
     },
     "hpa": {
@@ -169,10 +141,7 @@
       "type": "object",
       "properties": {
         "enabled":        { "type": "boolean" },
-        "updateMode": {
-          "type": "string",
-          "enum": ["Off", "Initial", "Recreate", "Auto"]
-        },
+        "updateMode":     { "type": "string", "enum": ["Off", "Initial", "Recreate", "Auto"] },
         "resourcePolicy": { "type": "object" }
       }
     },
@@ -184,20 +153,20 @@
         "maxUnavailable": { "type": ["integer", "string"] }
       }
     },
-    "networkPolicies":  { "type": "array" },
+    "networkPolicies":  { "type": "object" },
     "serviceMonitor": {
       "type": "object",
       "properties": {
-        "enabled":         { "type": "boolean" },
-        "namespace":       { "type": "string" },
-        "labels":          { "type": "object" },
-        "interval":        { "type": "string" },
-        "scrapeTimeout":   { "type": "string" },
-        "path":            { "type": "string" },
-        "port":            { "type": "string" },
-        "scheme":          { "type": "string", "enum": ["http", "https"] },
-        "tlsConfig":       { "type": "object" },
-        "relabelings":     { "type": "array" },
+        "enabled":           { "type": "boolean" },
+        "namespace":         { "type": "string" },
+        "labels":            { "type": "object" },
+        "interval":          { "type": "string" },
+        "scrapeTimeout":     { "type": "string" },
+        "path":              { "type": "string" },
+        "port":              { "type": "string" },
+        "scheme":            { "type": "string", "enum": ["http", "https"] },
+        "tlsConfig":         { "type": "object" },
+        "relabelings":       { "type": "array" },
         "metricRelabelings": { "type": "array" }
       }
     },

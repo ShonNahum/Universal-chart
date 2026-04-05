@@ -1,75 +1,74 @@
-{{- range .Values.persistentVolumes }}
+{{- range $name, $spec := .Values.persistentVolumes }}
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: {{ .name }}
+  name: {{ $name }}
   labels:
     {{- include "universal-chart.labels" $ | nindent 4 }}
-  {{- with merge ($.Values.commonAnnotations | default dict) (.annotations | default dict) }}
+  {{- with merge ($.Values.commonAnnotations | default dict) ($spec.annotations | default dict) }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   capacity:
-    storage: {{ .capacity }}
+    storage: {{ $spec.capacity }}
   accessModes:
-    {{- toYaml .accessModes | nindent 4 }}
-  persistentVolumeReclaimPolicy: {{ .reclaimPolicy | default "Retain" }}
-  {{- with .storageClassName }}
+    {{- toYaml $spec.accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: {{ $spec.reclaimPolicy | default "Retain" }}
+  {{- with $spec.storageClassName }}
   storageClassName: {{ . }}
   {{- end }}
-  volumeMode: {{ .volumeMode | default "Filesystem" }}
-  {{- with .mountOptions }}
+  volumeMode: {{ $spec.volumeMode | default "Filesystem" }}
+  {{- with $spec.mountOptions }}
   mountOptions:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .nodeAffinity }}
+  {{- with $spec.nodeAffinity }}
   nodeAffinity:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- /* ── Volume sources — define exactly one ───────── */}}
-  {{- with .hostPath }}
+  {{- with $spec.hostPath }}
   hostPath:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .nfs }}
+  {{- with $spec.nfs }}
   nfs:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .csi }}
+  {{- with $spec.csi }}
   csi:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .local }}
+  {{- with $spec.local }}
   local:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .iscsi }}
+  {{- with $spec.iscsi }}
   iscsi:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .fc }}
+  {{- with $spec.fc }}
   fc:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .rbd }}
+  {{- with $spec.rbd }}
   rbd:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .gcePersistentDisk }}
+  {{- with $spec.gcePersistentDisk }}
   gcePersistentDisk:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .awsElasticBlockStore }}
+  {{- with $spec.awsElasticBlockStore }}
   awsElasticBlockStore:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .azureDisk }}
+  {{- with $spec.azureDisk }}
   azureDisk:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .azureFile }}
+  {{- with $spec.azureFile }}
   azureFile:
     {{- toYaml . | nindent 4 }}
   {{- end }}

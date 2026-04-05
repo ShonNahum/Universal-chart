@@ -45,12 +45,12 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   ports:
-    {{- range .Values.service.ports }}
-    - name: {{ .name }}
-      port: {{ .port }}
-      targetPort: {{ .targetPort | default .name }}
-      protocol: {{ .protocol | default "TCP" }}
-      {{- with .nodePort }}
+    {{- range $name, $spec := .Values.service.ports }}
+    - name: {{ $name }}
+      port: {{ $spec.port }}
+      targetPort: {{ $spec.targetPort | default $name }}
+      protocol: {{ $spec.protocol | default "TCP" }}
+      {{- with $spec.nodePort }}
       nodePort: {{ . }}
       {{- end }}
     {{- end }}

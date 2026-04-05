@@ -43,27 +43,27 @@ spec:
       {{- include "universal-chart.podSpec" . | nindent 6 }}
   {{- with .Values.volumeClaimTemplates }}
   volumeClaimTemplates:
-    {{- range . }}
+    {{- range $name, $spec := . }}
     - metadata:
-        name: {{ .name }}
-        {{- with .annotations }}
+        name: {{ $name }}
+        {{- with $spec.annotations }}
         annotations:
           {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- with .labels }}
+        {{- with $spec.labels }}
         labels:
           {{- toYaml . | nindent 10 }}
         {{- end }}
       spec:
         accessModes:
-          {{- toYaml .accessModes | nindent 10 }}
-        {{- with .storageClassName }}
+          {{- toYaml $spec.accessModes | nindent 10 }}
+        {{- with $spec.storageClassName }}
         storageClassName: {{ . }}
         {{- end }}
-        volumeMode: {{ .volumeMode | default "Filesystem" }}
+        volumeMode: {{ $spec.volumeMode | default "Filesystem" }}
         resources:
           requests:
-            storage: {{ .size }}
+            storage: {{ $spec.size }}
     {{- end }}
   {{- end }}
 {{- end }}

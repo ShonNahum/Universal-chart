@@ -66,24 +66,28 @@ overhead:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 
-{{- /* ── Init containers ──────────────────────────── */}}
+{{- /* ── Init containers (map-based) ────────────────── */}}
 {{- with .Values.initContainers }}
 initContainers:
-  {{- toYaml . | nindent 2 }}
+  {{- range $name, $spec := . }}
+  - name: {{ $name }}
+    {{- toYaml $spec | nindent 4 }}
+  {{- end }}
 {{- end }}
 
 {{- /* ── Main container ───────────────────────────── */}}
 containers:
   {{- include "universal-chart.mainContainer" . | nindent 2 }}
-  {{- /* ── Sidecar containers ──────────────────────── */}}
-  {{- with .Values.sidecars }}
-  {{- toYaml . | nindent 2 }}
+  {{- /* ── Sidecar containers (map-based) ──────────── */}}
+  {{- range $name, $spec := .Values.sidecars }}
+  - name: {{ $name }}
+    {{- toYaml $spec | nindent 4 }}
   {{- end }}
 
-{{- /* ── Volumes ──────────────────────────────────── */}}
+{{- /* ── Volumes (map-based) ─────────────────────── */}}
 {{- with .Values.volumes }}
 volumes:
-  {{- toYaml . | nindent 2 }}
+  {{- include "universal-chart.mapToList" . | nindent 2 }}
 {{- end }}
 
 {{- /* ── Scheduling ───────────────────────────────── */}}
@@ -137,17 +141,23 @@ MAIN CONTAINER — all possible container spec fields
 
   {{- with .Values.ports }}
   ports:
-    {{- toYaml . | nindent 4 }}
+    {{- include "universal-chart.mapToList" . | nindent 4 }}
   {{- end }}
 
   {{- with .Values.env }}
   env:
-    {{- toYaml . | nindent 4 }}
+    {{- include "universal-chart.mapToList" . | nindent 4 }}
   {{- end }}
 
   {{- with .Values.envFrom }}
   envFrom:
-    {{- toYaml . | nindent 4 }}
+    {{- range $name, $spec := . }}
+    - {{ $spec.type | default "configMapRef" }}:
+        name: {{ $name }}
+      {{- if hasKey $spec "optional" }}
+      optional: {{ $spec.optional }}
+      {{- end }}
+    {{- end }}
   {{- end }}
 
   {{- with .Values.resources }}
@@ -182,7 +192,7 @@ MAIN CONTAINER — all possible container spec fields
 
   {{- with .Values.volumeMounts }}
   volumeMounts:
-    {{- toYaml . | nindent 4 }}
+    {{- include "universal-chart.mapToList" . | nindent 4 }}
   {{- end }}
 
   {{- with .Values.volumeDevices }}
@@ -228,7 +238,10 @@ securityContext:
 {{- end }}
 {{- with .job.initContainers }}
 initContainers:
-  {{- toYaml . | nindent 2 }}
+  {{- range $name, $spec := . }}
+  - name: {{ $name }}
+    {{- toYaml $spec | nindent 4 }}
+  {{- end }}
 {{- end }}
 containers:
   - name: {{ .job.name }}
@@ -244,11 +257,14 @@ containers:
     {{- end }}
     {{- with .job.env }}
     env:
-      {{- toYaml . | nindent 6 }}
+      {{- include "universal-chart.mapToList" . | nindent 6 }}
     {{- end }}
     {{- with .job.envFrom }}
     envFrom:
-      {{- toYaml . | nindent 6 }}
+      {{- range $name, $spec := . }}
+      - {{ $spec.type | default "configMapRef" }}:
+          name: {{ $name }}
+      {{- end }}
     {{- end }}
     {{- with .job.resources }}
     resources:
@@ -256,14 +272,15 @@ containers:
     {{- end }}
     {{- with .job.volumeMounts }}
     volumeMounts:
-      {{- toYaml . | nindent 6 }}
+      {{- include "universal-chart.mapToList" . | nindent 6 }}
     {{- end }}
-  {{- with .job.sidecars }}
-  {{- toYaml . | nindent 2 }}
+  {{- range $name, $spec := .job.sidecars }}
+  - name: {{ $name }}
+    {{- toYaml $spec | nindent 4 }}
   {{- end }}
 {{- with .job.volumes }}
 volumes:
-  {{- toYaml . | nindent 2 }}
+  {{- include "universal-chart.mapToList" . | nindent 2 }}
 {{- end }}
 {{- with .Values.nodeSelector }}
 nodeSelector:

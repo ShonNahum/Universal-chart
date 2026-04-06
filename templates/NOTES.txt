@@ -18,6 +18,7 @@
   echo "http://$SERVICE_IP"
 {{- else }}
 2. Port-forward to access locally:
-  kubectl port-forward svc/{{ $fullName }} 8080:{{ (index .Values.service.ports 0).port }}
+  {{- $firstPort := 80 }}{{- range $name, $spec := .Values.service.ports }}{{- $firstPort = $spec.port }}{{- break }}{{- end }}
+  kubectl port-forward svc/{{ $fullName }} 8080:{{ $firstPort }}
   Then open: http://localhost:8080
 {{- end }}

@@ -1,61 +1,61 @@
 {{/* Roles */}}
-{{- range .Values.rbac.roles }}
+{{- range $name, $spec := .Values.rbac.roles }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ .name }}
+  name: {{ $name }}
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "universal-chart.labels" $ | nindent 4 }}
 rules:
-  {{- toYaml .rules | nindent 2 }}
+  {{- toYaml $spec.rules | nindent 2 }}
 {{- end }}
 
 {{/* RoleBindings */}}
-{{- range .Values.rbac.roleBindings }}
+{{- range $name, $spec := .Values.rbac.roleBindings }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ .name }}
+  name: {{ $name }}
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "universal-chart.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ .roleRef }}
+  name: {{ $spec.roleRef }}
 subjects:
-  {{- toYaml .subjects | nindent 2 }}
+  {{- toYaml $spec.subjects | nindent 2 }}
 {{- end }}
 
 {{/* ClusterRoles */}}
-{{- range .Values.rbac.clusterRoles }}
+{{- range $name, $spec := .Values.rbac.clusterRoles }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .name }}
+  name: {{ $name }}
   labels:
     {{- include "universal-chart.labels" $ | nindent 4 }}
 rules:
-  {{- toYaml .rules | nindent 2 }}
+  {{- toYaml $spec.rules | nindent 2 }}
 {{- end }}
 
 {{/* ClusterRoleBindings */}}
-{{- range .Values.rbac.clusterRoleBindings }}
+{{- range $name, $spec := .Values.rbac.clusterRoleBindings }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .name }}
+  name: {{ $name }}
   labels:
     {{- include "universal-chart.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ .roleRef }}
+  name: {{ $spec.roleRef }}
 subjects:
-  {{- toYaml .subjects | nindent 2 }}
+  {{- toYaml $spec.subjects | nindent 2 }}
 {{- end }}

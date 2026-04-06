@@ -66,6 +66,31 @@ Image string helper
 
 {{/*
 =============================================================================
+MAP-TO-LIST — convert map-based values to Kubernetes arrays
+=============================================================================
+Helm deep-merges maps but replaces arrays. We store values as maps (keyed by
+name) so GitOps overrides can patch individual entries. These helpers convert
+maps back to the array format Kubernetes expects.
+
+Usage:  {{- include "universal-chart.mapToList" .Values.ports | nindent 4 }}
+*/}}
+{{- define "universal-chart.mapToList" -}}
+{{- range $name, $spec := . }}
+- name: {{ $name }}
+  {{- toYaml $spec | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
+First key from a map — used when we need a default port name, etc.
+Usage:  {{ include "universal-chart.firstKey" .Values.service.ports }}
+*/}}
+{{- define "universal-chart.firstKey" -}}
+{{- range $k, $_ := . }}{{ $k }}{{ break }}{{- end }}
+{{- end }}
+
+{{/*
+=============================================================================
 CHECKSUM — auto-restart pods when ConfigMaps or Secrets change
 =============================================================================
 Usage: add to pod annotations:

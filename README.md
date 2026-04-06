@@ -1,8 +1,9 @@
 # universal-chart
 
-A generic, modular Helm chart for deploying **any** application to Kubernetes or OpenShift.
-Configure everything through `values.yaml` — no app-specific templates needed.
+A generic, modular Helm chart for deploying any application to Kubernetes or OpenShift.
+All configuration is handled through values.yaml — no app-specific templates required.
 
+In my workflow, I publish this chart to ChartMuseum and reference it from my application’s Chart.yaml as a dependency (an umbrella chart setup is also an option (charts/).
 ---
 
 ## Table of Contents

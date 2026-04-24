@@ -557,6 +557,13 @@
       </div>
     </div>
 
+    <!-- SCC (OpenShift) -->
+    <div class="section" data-section="scc" data-keywords="openshift scc security context constraints privileged capabilities">
+      <div class="section-header" onclick="toggleSection(this)"><span class="section-title">OpenShift SCC<span class="tip">?<span class="tip-text">SecurityContextConstraints control pod security on OpenShift — who can run privileged containers, which volumes are allowed, host access, etc.</span></span></span><svg class="chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 3l5 5-5 5V3z"/></svg></div>
+      <div class="section-body">
+        <div class="section-desc">Define OpenShift SecurityContextConstraints. Each SCC controls what a pod is allowed to do.</div><div class="list-items" id="scc-list"></div><button class="add-btn" onclick="addScc()">+ Add SCC</button></div>
+    </div>
+
     <!-- ConfigMaps -->
     <div class="section" data-section="configMaps" data-keywords="configmap config configuration data key value">
       <div class="section-header" onclick="toggleSection(this)"><span class="section-title">ConfigMaps<span class="tip">?<span class="tip-text">Store non-sensitive configuration (settings, config files) separately from your app image.</span></span></span><svg class="chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 3l5 5-5 5V3z"/></svg></div>
@@ -828,6 +835,7 @@ const ENV_SECTIONS = {
   service: { label: 'Service', fields: ['serviceEnabled','serviceType','serviceAnnotations','serviceClusterIP','serviceExternalTrafficPolicy','serviceSessionAffinity','servicePublishNotReady','serviceLbSourceRanges'], arrays: ['servicePorts'] },
   ingress: { label: 'Ingress', fields: ['ingressEnabled','ingressClass','ingressAnnotations'], arrays: ['ingressHosts','ingressTls'] },
   route: { label: 'Route (OpenShift)', fields: ['routeEnabled','routeHost','routePath','routeTargetPort','routeTls','routeAnnotations'] },
+  scc: { label: 'SCC (OpenShift)', arrays: ['sccs'] },
   configMaps: { label: 'ConfigMaps', arrays: ['configMaps'] },
   secrets: { label: 'Secrets', arrays: ['secrets'] },
   pvc: { label: 'PVC', arrays: ['pvcs'] },
@@ -851,6 +859,7 @@ function createDefaultAppState(name) {
     name,
     ports:[], envVars:[], envFromItems:[], restartRules:[],
     servicePorts:[{name:'http',port:'80',targetPort:'http',protocol:'TCP',nodePort:''}],
+    sccs:[],
     configMaps:[], secrets:[], pvcs:[], vcts:[],
     initContainers:[], sidecars:[], mounts:[], volumes:[],
     cronjobs:[], jobs:[], nodeSelectors:[], tolerations:[], netPols:[],
@@ -908,6 +917,7 @@ function saveCurrentAppState() {
   });
   app.ports=JSON.parse(JSON.stringify(ports)); app.envVars=JSON.parse(JSON.stringify(envVars)); app.envFromItems=JSON.parse(JSON.stringify(envFromItems)); app.restartRules=JSON.parse(JSON.stringify(restartRules));
   app.servicePorts=JSON.parse(JSON.stringify(servicePorts));
+  app.sccs=JSON.parse(JSON.stringify(sccs));
   app.configMaps=JSON.parse(JSON.stringify(configMaps)); app.secrets=JSON.parse(JSON.stringify(secrets));
   app.pvcs=JSON.parse(JSON.stringify(pvcs)); app.vcts=JSON.parse(JSON.stringify(vcts));
   app.initContainers=JSON.parse(JSON.stringify(initContainers)); app.sidecars=JSON.parse(JSON.stringify(sidecars));
@@ -937,6 +947,7 @@ function loadAppState(idx) {
   envFromItems = app.envFromItems ? JSON.parse(JSON.stringify(app.envFromItems)) : [];
   restartRules = app.restartRules ? JSON.parse(JSON.stringify(app.restartRules)) : [];
   servicePorts = app.servicePorts ? JSON.parse(JSON.stringify(app.servicePorts)) : [{name:'http',port:'80',targetPort:'http',protocol:'TCP',nodePort:''}];
+  sccs = app.sccs ? JSON.parse(JSON.stringify(app.sccs)) : [];
   configMaps = app.configMaps ? JSON.parse(JSON.stringify(app.configMaps)) : [];
   secrets = app.secrets ? JSON.parse(JSON.stringify(app.secrets)) : [];
   pvcs = app.pvcs ? JSON.parse(JSON.stringify(app.pvcs)) : [];
@@ -965,7 +976,7 @@ function loadAppState(idx) {
 
 function renderAllLists() {
   renderPorts(); renderEnv(); renderEnvFrom(); renderRestartRules(); renderServicePorts();
-  renderConfigMaps(); renderSecrets(); renderPvcs(); renderVcts();
+  renderSccs(); renderConfigMaps(); renderSecrets(); renderPvcs(); renderVcts();
   renderInits(); renderSidecars(); renderStorage(); renderHostAliases();
   renderCronJobs(); renderJobs(); renderNodeSelectors(); renderTolerations(); renderNetPols();
   renderIngressHosts(); renderIngressTls();
@@ -1055,7 +1066,7 @@ function cloneAppSnapshot() {
     if (!el) return;
     snap.fields[id] = CHECKBOX_FIELDS.includes(id) ? el.checked : el.value;
   });
-  const ARRAY_NAMES = ['ports','envVars','envFromItems','restartRules','servicePorts','configMaps','secrets','pvcs','vcts','initContainers','sidecars','mounts','volumes','storageItems','hostAliases','cronjobs','jobs','nodeSelectors','tolerations','netPols','ingressHosts','ingressTls','roles','roleBindings','clusterRoles','clusterRoleBindings','extraDeploy'];
+  const ARRAY_NAMES = ['ports','envVars','envFromItems','restartRules','servicePorts','sccs','configMaps','secrets','pvcs','vcts','initContainers','sidecars','mounts','volumes','storageItems','hostAliases','cronjobs','jobs','nodeSelectors','tolerations','netPols','ingressHosts','ingressTls','roles','roleBindings','clusterRoles','clusterRoleBindings','extraDeploy'];
   ARRAY_NAMES.forEach(n => { snap.arrays[n] = JSON.parse(JSON.stringify(window[n] || [])); });
   return snap;
 }
@@ -1135,7 +1146,7 @@ function addEnvironment() {
   const env = createEnvState(name.trim());
   // Pre-populate env state from base so diffing works correctly
   env.state = { fields: JSON.parse(JSON.stringify(app.fields || {})), arrays: {} };
-  const ARRAY_NAMES = ['ports','envVars','envFromItems','restartRules','servicePorts','configMaps','secrets','pvcs','vcts','initContainers','sidecars','mounts','volumes','storageItems','hostAliases','cronjobs','jobs','nodeSelectors','tolerations','netPols','ingressHosts','ingressTls','roles','roleBindings','clusterRoles','clusterRoleBindings','extraDeploy'];
+  const ARRAY_NAMES = ['ports','envVars','envFromItems','restartRules','servicePorts','sccs','configMaps','secrets','pvcs','vcts','initContainers','sidecars','mounts','volumes','storageItems','hostAliases','cronjobs','jobs','nodeSelectors','tolerations','netPols','ingressHosts','ingressTls','roles','roleBindings','clusterRoles','clusterRoleBindings','extraDeploy'];
   ARRAY_NAMES.forEach(n => { env.state.arrays[n] = JSON.parse(JSON.stringify(app[n] || [])); });
 
   app.environments.push(env);
@@ -1913,6 +1924,12 @@ function addIngressTls(){ingressTls.push({secretName:'',hosts:''});renderIngress
 function removeIngressTls(i){ingressTls.splice(i,1);renderIngressTls();generate()}
 function renderIngressTls(){renderList('ingress-tls-list',ingressTls,(t,i)=>`<div class="list-item"><button class="remove-btn" onclick="removeIngressTls(${i})">&times;</button><div class="field-row"><div class="field"><label>Secret Name</label><input type="text" value="${esc(t.secretName)}" placeholder="myapp-tls" oninput="ingressTls[${i}].secretName=this.value;generate()"></div><div class="field"><label>Hosts (comma-separated)</label><input type="text" value="${esc(t.hosts)}" placeholder="myapp.example.com" oninput="ingressTls[${i}].hosts=this.value;generate()"></div></div></div>`)}
 
+// ── SCC (OpenShift) ──
+let sccs=[];
+function addScc(){sccs.push({name:'',allowPrivilegedContainer:false,allowPrivilegeEscalation:false,runAsUserType:'MustRunAsRange',seLinuxContextType:'MustRunAs',fsGroupType:'MustRunAs',supplementalGroupsType:'RunAsAny',volumes:'configMap, downwardAPI, emptyDir, persistentVolumeClaim, projected, secret',requiredDropCapabilities:'ALL',allowHostNetwork:false,allowHostPorts:false,allowHostPID:false,allowHostIPC:false,readOnlyRootFilesystem:false,users:'',groups:'',priority:''});renderSccs();generate()}
+function removeScc(i){sccs.splice(i,1);renderSccs();generate()}
+function renderSccs(){renderList('scc-list',sccs,(s,i)=>`<div class="list-item"><button class="remove-btn" onclick="removeScc(${i})">&times;</button><div class="field" style="margin-bottom:10px;"><label>SCC Name</label><input type="text" value="${esc(s.name)}" placeholder="restricted-custom" oninput="sccs[${i}].name=this.value;generate()"></div><div class="field-row"><div class="field"><label>Run As User Strategy</label><select onchange="sccs[${i}].runAsUserType=this.value;generate()"><option value="MustRunAsRange" ${s.runAsUserType==='MustRunAsRange'?'selected':''}>MustRunAsRange</option><option value="MustRunAs" ${s.runAsUserType==='MustRunAs'?'selected':''}>MustRunAs</option><option value="MustRunAsNonRoot" ${s.runAsUserType==='MustRunAsNonRoot'?'selected':''}>MustRunAsNonRoot</option><option value="RunAsAny" ${s.runAsUserType==='RunAsAny'?'selected':''}>RunAsAny</option></select></div><div class="field"><label>SELinux Context Strategy</label><select onchange="sccs[${i}].seLinuxContextType=this.value;generate()"><option value="MustRunAs" ${s.seLinuxContextType==='MustRunAs'?'selected':''}>MustRunAs</option><option value="RunAsAny" ${s.seLinuxContextType==='RunAsAny'?'selected':''}>RunAsAny</option></select></div></div><div class="field-row"><div class="field"><label>FS Group Strategy</label><select onchange="sccs[${i}].fsGroupType=this.value;generate()"><option value="MustRunAs" ${s.fsGroupType==='MustRunAs'?'selected':''}>MustRunAs</option><option value="RunAsAny" ${s.fsGroupType==='RunAsAny'?'selected':''}>RunAsAny</option></select></div><div class="field"><label>Supplemental Groups Strategy</label><select onchange="sccs[${i}].supplementalGroupsType=this.value;generate()"><option value="RunAsAny" ${s.supplementalGroupsType==='RunAsAny'?'selected':''}>RunAsAny</option><option value="MustRunAs" ${s.supplementalGroupsType==='MustRunAs'?'selected':''}>MustRunAs</option></select></div></div><div class="toggle-row"><span class="toggle-label">Allow Privileged Container</span><label class="toggle"><input type="checkbox" ${s.allowPrivilegedContainer?'checked':''} onchange="sccs[${i}].allowPrivilegedContainer=this.checked;generate()"><span class="toggle-track"></span><span class="toggle-thumb"></span></label></div><div class="toggle-row"><span class="toggle-label">Allow Privilege Escalation</span><label class="toggle"><input type="checkbox" ${s.allowPrivilegeEscalation?'checked':''} onchange="sccs[${i}].allowPrivilegeEscalation=this.checked;generate()"><span class="toggle-track"></span><span class="toggle-thumb"></span></label></div><div class="toggle-row"><span class="toggle-label">Read-Only Root Filesystem</span><label class="toggle"><input type="checkbox" ${s.readOnlyRootFilesystem?'checked':''} onchange="sccs[${i}].readOnlyRootFilesystem=this.checked;generate()"><span class="toggle-track"></span><span class="toggle-thumb"></span></label></div><div class="adv-toggle" onclick="toggleAdv(this)">Host Access & More</div><div class="adv-fields"><div class="toggle-row"><span class="toggle-label">Allow Host Network</span><label class="toggle"><input type="checkbox" ${s.allowHostNetwork?'checked':''} onchange="sccs[${i}].allowHostNetwork=this.checked;generate()"><span class="toggle-track"></span><span class="toggle-thumb"></span></label></div><div class="toggle-row"><span class="toggle-label">Allow Host Ports</span><label class="toggle"><input type="checkbox" ${s.allowHostPorts?'checked':''} onchange="sccs[${i}].allowHostPorts=this.checked;generate()"><span class="toggle-track"></span><span class="toggle-thumb"></span></label></div><div class="toggle-row"><span class="toggle-label">Allow Host PID</span><label class="toggle"><input type="checkbox" ${s.allowHostPID?'checked':''} onchange="sccs[${i}].allowHostPID=this.checked;generate()"><span class="toggle-track"></span><span class="toggle-thumb"></span></label></div><div class="toggle-row"><span class="toggle-label">Allow Host IPC</span><label class="toggle"><input type="checkbox" ${s.allowHostIPC?'checked':''} onchange="sccs[${i}].allowHostIPC=this.checked;generate()"><span class="toggle-track"></span><span class="toggle-thumb"></span></label></div><div class="field"><label>Volumes (comma-separated)</label><input type="text" value="${esc(s.volumes)}" placeholder="configMap, emptyDir, secret, persistentVolumeClaim" oninput="sccs[${i}].volumes=this.value;generate()"></div><div class="field"><label>Required Drop Capabilities (comma-separated)</label><input type="text" value="${esc(s.requiredDropCapabilities)}" placeholder="ALL" oninput="sccs[${i}].requiredDropCapabilities=this.value;generate()"></div><div class="field"><label>Users (one per line, e.g. system:serviceaccount:ns:sa)</label><textarea oninput="sccs[${i}].users=this.value;generate()" placeholder="system:serviceaccount:myns:mysa">${esc(s.users)}</textarea></div><div class="field"><label>Groups (one per line)</label><textarea oninput="sccs[${i}].groups=this.value;generate()" placeholder="system:authenticated">${esc(s.groups)}</textarea></div><div class="field"><label>Priority</label><input type="number" value="${esc(s.priority)}" placeholder="" onchange="sccs[${i}].priority=this.value;generate()"></div></div></div>`)}
+
 // ── RBAC ──
 let roles=[], roleBindings=[], clusterRoles=[], clusterRoleBindings=[];
 function addRole(){roles.push({name:'',rules:''});renderRoles();generate()}
@@ -2020,6 +2037,8 @@ function generate(){
   const vha=hostAliases.filter(h=>h.ip);if(vha.length){y.push('');y.push('hostAliases:');vha.forEach(h=>{y.push(`  - ip: "${h.ip}"`);const hs=h.hostnames.split(',').map(s=>s.trim()).filter(Boolean);if(hs.length){y.push('    hostnames:');hs.forEach(hn=>y.push(`      - "${hn}"`))}})}
   const affyml=val('affinityYaml').trim();if(affyml){y.push('');y.push('affinity:');affyml.split('\n').forEach(l=>y.push('  '+l))}
   const topyml=val('topologyYaml').trim();if(topyml){y.push('');y.push('topologySpreadConstraints:');topyml.split('\n').forEach(l=>y.push('  '+l))}
+  // SCC (OpenShift)
+  const vscc=sccs.filter(s=>s.name);if(vscc.length){y.push('');y.push('scc:');vscc.forEach(s=>{y.push(`  ${s.name}:`);y.push(`    allowPrivilegedContainer: ${!!s.allowPrivilegedContainer}`);y.push(`    allowPrivilegeEscalation: ${!!s.allowPrivilegeEscalation}`);const drops=s.requiredDropCapabilities?s.requiredDropCapabilities.split(',').map(c=>c.trim()).filter(Boolean):['ALL'];y.push(`    requiredDropCapabilities: [${drops.join(', ')}]`);y.push('    runAsUser:');y.push(`      type: ${s.runAsUserType||'MustRunAsRange'}`);y.push('    seLinuxContext:');y.push(`      type: ${s.seLinuxContextType||'MustRunAs'}`);y.push('    fsGroup:');y.push(`      type: ${s.fsGroupType||'MustRunAs'}`);y.push('    supplementalGroups:');y.push(`      type: ${s.supplementalGroupsType||'RunAsAny'}`);const vols=s.volumes?s.volumes.split(',').map(v=>v.trim()).filter(Boolean):['configMap','downwardAPI','emptyDir','persistentVolumeClaim','projected','secret'];y.push('    volumes:');vols.forEach(v=>y.push(`      - ${v}`));y.push(`    allowHostNetwork: ${!!s.allowHostNetwork}`);y.push(`    allowHostPorts: ${!!s.allowHostPorts}`);y.push(`    allowHostPID: ${!!s.allowHostPID}`);y.push(`    allowHostIPC: ${!!s.allowHostIPC}`);y.push(`    readOnlyRootFilesystem: ${!!s.readOnlyRootFilesystem}`);const users=(s.users||'').split('\n').map(u=>u.trim()).filter(Boolean);if(users.length){y.push('    users:');users.forEach(u=>y.push(`      - ${u}`))}const groups=(s.groups||'').split('\n').map(g=>g.trim()).filter(Boolean);if(groups.length){y.push('    groups:');groups.forEach(g=>y.push(`      - ${g}`))}if(s.priority)y.push(`    priority: ${s.priority}`)})}
   // RBAC
   const vrl=roles.filter(r=>r.name);const vrb=roleBindings.filter(r=>r.name);const vcrl=clusterRoles.filter(r=>r.name);const vcrb=clusterRoleBindings.filter(r=>r.name);
   if(vrl.length||vrb.length||vcrl.length||vcrb.length){y.push('');y.push('rbac:');if(vrl.length){y.push('  roles:');vrl.forEach(r=>{y.push(`    ${r.name}:`);if(r.rules.trim()){y.push('      rules:');r.rules.trim().split('\n').forEach(l=>y.push('        '+l))}})}if(vrb.length){y.push('  roleBindings:');vrb.forEach(r=>{y.push(`    ${r.name}:`);y.push(`      roleRef: ${r.roleRef}`);if(r.subjects.trim()){y.push('      subjects:');r.subjects.trim().split('\n').forEach(l=>y.push('        '+l))}})}if(vcrl.length){y.push('  clusterRoles:');vcrl.forEach(r=>{y.push(`    ${r.name}:`);if(r.rules.trim()){y.push('      rules:');r.rules.trim().split('\n').forEach(l=>y.push('        '+l))}})}if(vcrb.length){y.push('  clusterRoleBindings:');vcrb.forEach(r=>{y.push(`    ${r.name}:`);y.push(`      roleRef: ${r.roleRef}`);if(r.subjects.trim()){y.push('      subjects:');r.subjects.trim().split('\n').forEach(l=>y.push('        '+l))}})}}
@@ -2065,6 +2084,7 @@ const SECTION_YAML_KEYS = {
   service: ['service'],
   ingress: ['ingress'],
   route: ['route'],
+  scc: ['scc'],
   configMaps: ['configMaps'],
   secrets: ['secrets'],
   pvc: ['pvc'],
@@ -3094,6 +3114,36 @@ function importK8sManifests(){
       const key=kind==='rolebinding'?'roleBindings':'clusterRoleBindings';
       if(!values.rbac[key])values.rbac[key]=[];
       values.rbac[key].push({name:meta.name||'',roleRef:obj.roleRef?.name||'',subjects:obj.subjects||[]});
+    }
+    else if(kind==='securitycontextconstraints'){
+      if(!values.sccs)values.sccs=[];
+      values.sccs.push({
+        name:meta.name||'',
+        allowPrivilegedContainer:!!obj.allowPrivilegedContainer,
+        allowPrivilegeEscalation:!!obj.allowPrivilegeEscalation,
+        runAsUserType:obj.runAsUser?.type||'MustRunAsRange',
+        seLinuxContextType:obj.seLinuxContext?.type||'MustRunAs',
+        fsGroupType:obj.fsGroup?.type||'MustRunAs',
+        supplementalGroupsType:obj.supplementalGroups?.type||'RunAsAny',
+        volumes:Array.isArray(obj.volumes)?obj.volumes.join(', '):'configMap, downwardAPI, emptyDir, persistentVolumeClaim, projected, secret',
+        requiredDropCapabilities:Array.isArray(obj.requiredDropCapabilities)?obj.requiredDropCapabilities.join(', '):'ALL',
+        allowHostNetwork:!!obj.allowHostNetwork,
+        allowHostPorts:!!obj.allowHostPorts,
+        allowHostPID:!!obj.allowHostPID,
+        allowHostIPC:!!obj.allowHostIPC,
+        readOnlyRootFilesystem:!!obj.readOnlyRootFilesystem,
+        users:Array.isArray(obj.users)?obj.users.join('\n'):'',
+        groups:Array.isArray(obj.groups)?obj.groups.join('\n'):'',
+        priority:obj.priority||''
+      });
+    }
+    else if(kind==='route'){
+      values.route={enabled:true};
+      if(spec.host)values.route.host=spec.host;
+      if(spec.path)values.route.path=spec.path;
+      if(spec.port?.targetPort)values.route.targetPort=spec.port.targetPort;
+      if(meta.annotations)values.route.annotations=meta.annotations;
+      if(spec.tls)values.route.tls=spec.tls;
     }
   }
 

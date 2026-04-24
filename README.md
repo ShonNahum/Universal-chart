@@ -36,7 +36,7 @@ In my workflow, I publish this chart to ChartMuseum and reference it from my app
 - Choose **Deployment**, **StatefulSet**, or **DaemonSet**
 - Add sidecars, init containers, ConfigMaps, Secrets, PVCs — all from values
 - Built-in support for HPA, VPA, PDB, RBAC, NetworkPolicies, CronJobs, Jobs
-- Works on both plain **Kubernetes** and **OpenShift** (Route support)
+- Works on both plain **Kubernetes** and **OpenShift** (Route and SCC support)
 - Comes with a **browser-based UI** to visually generate your `values.yaml`
 - Full **Helm unit test** suite (`tests/`) and **UI Jest test** suite (`ui/`)
 
@@ -60,6 +60,7 @@ universal-chart/
 │   ├── service.yaml
 │   ├── ingress.yaml
 │   ├── route.yaml                    # OpenShift Route
+│   ├── scc.yaml                      # OpenShift SecurityContextConstraints
 │   ├── configmap.yaml                # loops over .Values.configMaps
 │   ├── secret.yaml                   # loops over .Values.secrets
 │   ├── pvc.yaml                      # loops over .Values.pvc
@@ -96,6 +97,7 @@ universal-chart/
 │   ├── storageclass_test.yaml
 │   ├── route_test.yaml
 │   ├── serviceaccount_test.yaml
+│   ├── scc_test.yaml
 │   ├── servicemonitor_test.yaml
 │   ├── extra_deploy_test.yaml
 │   └── validation_test.yaml
@@ -230,6 +232,7 @@ The UI covers every chart feature via a form:
 | **Service** | Type, ports, annotations |
 | **Ingress** | Hosts, paths, TLS, className, annotations |
 | **OpenShift Route** | Host, path, TLS termination |
+| **OpenShift SCC** | SecurityContextConstraints (privileges, strategies, etc.) |
 | **ConfigMaps** | Key-value data, multi-line files |
 | **Secrets** | Opaque, TLS, Docker registry secrets |
 | **PVC / PV** | Storage claims and persistent volumes |

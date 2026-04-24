@@ -101,6 +101,7 @@
         "tls": { "type": "object" }
       }
     },
+    "scc":                   { "type": "object" },
     "configMaps":            { "type": "object" },
     "secrets":               { "type": "object" },
     "pvc":                   { "type": "object" },

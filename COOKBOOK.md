@@ -38,6 +38,7 @@ A practical reference for every feature with real-world examples.
 31. [Container Restart Rules (K8s 1.35+)](#31-container-restart-rules)
 32. [Checksums — Opt-in Pod Restart on Config Change](#32-checksums)
 33. [StatefulSet Pod Anti-Affinity](#33-statefulset-pod-anti-affinity)
+34. [OpenShift SecurityContextConstraints (SCC)](#34-openshift-scc)
 
 ---
 
@@ -1624,3 +1625,77 @@ topologySpreadConstraints:
 ```
 
 > **Tip**: Use `app.kubernetes.io/name` in `matchLabels` — this is exactly what the chart sets as a selector label. The value equals your `nameOverride` or chart name.
+
+---
+
+## 34. OpenShift SecurityContextConstraints (SCC)
+
+SecurityContextConstraints control the set of conditions that a pod must run with in order to be accepted into the OpenShift system. Use them to lock down pod permissions or allow specific privileges.
+
+### Basic "restricted-custom" SCC
+
+A secure SCC that forces pods to run as non-root and drops most capabilities.
+
+```yaml
+scc:
+  restricted-custom:
+    allowPrivilegedContainer: false
+    allowPrivilegeEscalation: false
+    requiredDropCapabilities: [ALL]
+    runAsUser:
+      type: MustRunAsRange
+    seLinuxContext:
+      type: MustRunAs
+    fsGroup:
+      type: MustRunAs
+    supplementalGroups:
+      type: RunAsAny
+    volumes: [configMap, downwardAPI, emptyDir, persistentVolumeClaim, projected, secret]
+    users:
+      - system:serviceaccount:my-namespace:my-sa
+```
+
+### Privileged SCC for infrastructure agents
+
+Allows host networking, host storage, and running as any user.
+
+```yaml
+scc:
+  privileged-custom:
+    allowPrivilegedContainer: true
+    allowPrivilegeEscalation: true
+    runAsUser:
+      type: RunAsAny
+    seLinuxContext:
+      type: RunAsAny
+    fsGroup:
+      type: RunAsAny
+    supplementalGroups:
+      type: RunAsAny
+    volumes: ["*"] # Allow all volume types
+    allowHostNetwork: true
+    allowHostPorts: true
+    allowHostPID: true
+    allowHostIPC: true
+    users:
+      - system:serviceaccount:my-monitoring-ns:prometheus
+```
+
+### Strategy Types for runAsUser/fsGroup/supplementalGroups:
+
+- `MustRunAsRange`: Requires a numeric range (common for OpenShift project defaults).
+- `MustRunAs`: Requires a specific UID or value.
+- `MustRunAsNonRoot`: Pod must not run as UID 0.
+- `RunAsAny`: No restriction.
+
+### Assigning to users or groups
+
+Use the `users` and `groups` arrays inside the SCC definition to specify who can use this SCC. Most commonly, you'll target specific service accounts:
+
+```yaml
+scc:
+  my-app-scc:
+    # ...
+    users:
+      - system:serviceaccount:<namespace>:<serviceaccount-name>
+```

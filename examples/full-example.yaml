@@ -247,6 +247,27 @@ route:
   enabled: false
 
 # ---------------------------------------------------------------------------
+# OpenShift SCC
+# ---------------------------------------------------------------------------
+scc:
+  db-restricted:
+    allowPrivilegedContainer: false
+    allowPrivilegeEscalation: false
+    requiredDropCapabilities: [ALL]
+    runAsUser:
+      type: MustRunAsRange
+    seLinuxContext:
+      type: MustRunAs
+    fsGroup:
+      type: MustRunAs
+    supplementalGroups:
+      type: RunAsAny
+    volumes: [configMap, downwardAPI, emptyDir, persistentVolumeClaim, projected, secret]
+    users:
+      - system:serviceaccount:prod:pg-serviceaccount
+
+
+# ---------------------------------------------------------------------------
 # ConfigMaps
 # ---------------------------------------------------------------------------
 configMaps:

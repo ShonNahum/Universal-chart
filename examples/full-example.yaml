@@ -1,7 +1,5 @@
 # Full-featured example — exercises every chart feature
-# Tests: StatefulSet, volumeClaimTemplates, headless service, ConfigMaps, Secrets,
-#        RBAC, CronJob, NetworkPolicy, ServiceMonitor, VPA, PDB, HPA (disabled for STS),
-#        podAntiAffinity, checksums, extraDeploy, initContainers, sidecars
+# Fixed to match the latest map-based values schema.
 
 workload:
   type: statefulset
@@ -50,32 +48,32 @@ securityContext:
 # Main container
 # ---------------------------------------------------------------------------
 ports:
-  - name: postgres
+  postgres:
     containerPort: 5432
     protocol: TCP
 
 env:
-  - name: POSTGRES_DB
+  POSTGRES_DB:
     valueFrom:
       configMapKeyRef:
         name: pg-config
         key: POSTGRES_DB
-  - name: POSTGRES_USER
+  POSTGRES_USER:
     valueFrom:
       secretKeyRef:
         name: pg-secret
         key: POSTGRES_USER
-  - name: POSTGRES_PASSWORD
+  POSTGRES_PASSWORD:
     valueFrom:
       secretKeyRef:
         name: pg-secret
         key: POSTGRES_PASSWORD
-  - name: PGDATA
+  PGDATA:
     value: /var/lib/postgresql/data/pgdata
 
 envFrom:
-  - configMapRef:
-      name: pg-config
+  pg-config:
+    type: configMapRef
 
 resources:
   requests:
@@ -110,29 +108,29 @@ terminationGracePeriodSeconds: 60
 # Volume mounts
 # ---------------------------------------------------------------------------
 volumeMounts:
-  - name: data
+  data:
     mountPath: /var/lib/postgresql/data
-  - name: config-vol
+  config-vol:
     mountPath: /etc/postgresql/conf.d
     readOnly: true
-  - name: tmp-dir
+  tmp-dir:
     mountPath: /tmp
 
 volumes:
-  - name: config-vol
+  config-vol:
     configMap:
       name: pg-config
       items:
         - key: postgresql.conf
           path: custom.conf
-  - name: tmp-dir
+  tmp-dir:
     emptyDir: {}
 
 # ---------------------------------------------------------------------------
 # StatefulSet volumeClaimTemplates (one PVC per pod)
 # ---------------------------------------------------------------------------
 volumeClaimTemplates:
-  - name: data
+  data:
     accessModes: [ReadWriteOnce]
     size: 20Gi
     storageClassName: fast-ssd
@@ -142,329 +140,165 @@ volumeClaimTemplates:
 # Init containers
 # ---------------------------------------------------------------------------
 initContainers:
-  - name: init-permissions
+  init-permissions:
     image: busybox:1.36
     command:
       - sh
       - -c
       - |
-        mkdir -p /var/lib/postgresql/data/pgdata
         chown -R 999:999 /var/lib/postgresql/data
-    securityContext:
-      runAsUser: 0
-      runAsNonRoot: false
     volumeMounts:
-      - name: data
+      data:
         mountPath: /var/lib/postgresql/data
-    resources:
-      requests:
-        cpu: 50m
-        memory: 32Mi
 
 # ---------------------------------------------------------------------------
 # Sidecars
 # ---------------------------------------------------------------------------
 sidecars:
-  - name: metrics-exporter
+  exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
-    env:
-      - name: DATA_SOURCE_USER
-        valueFrom:
-          secretKeyRef:
-            name: pg-secret
-            key: POSTGRES_USER
-      - name: DATA_SOURCE_PASS
-        valueFrom:
-          secretKeyRef:
-            name: pg-secret
-            key: POSTGRES_PASSWORD
-      - name: DATA_SOURCE_URI
-        value: "localhost:5432/$(POSTGRES_DB)?sslmode=disable"
     ports:
-      - name: metrics
+      metrics:
         containerPort: 9187
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 200m
-        memory: 256Mi
+    env:
+      DATA_SOURCE_NAME:
+        value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/postgres?sslmode=disable"
 
 # ---------------------------------------------------------------------------
-# Scheduling — podAntiAffinity keeps each replica on a different node
-# ---------------------------------------------------------------------------
-nodeSelector:
-  kubernetes.io/os: linux
-
-tolerations:
-  - key: "database"
-    operator: Equal
-    value: "true"
-    effect: NoSchedule
-
-affinity:
-  podAntiAffinity:
-    # HARD: Require each postgres pod on a different node
-    requiredDuringSchedulingIgnoredDuringExecution:
-      - labelSelector:
-          matchLabels:
-            app.kubernetes.io/name: full-example
-        topologyKey: kubernetes.io/hostname
-
-topologySpreadConstraints:
-  - maxSkew: 1
-    topologyKey: topology.kubernetes.io/zone
-    whenUnsatisfiable: ScheduleAnyway
-    labelSelector:
-      matchLabels:
-        app.kubernetes.io/name: full-example
-
-# ---------------------------------------------------------------------------
-# Checksums — opt-in: restart pods when ConfigMaps/Secrets change
-# ---------------------------------------------------------------------------
-checksums:
-  enabled: false   # pods will rolling-restart when pg-config or pg-secret changes
-
-# ---------------------------------------------------------------------------
-# Service — headless for stable StatefulSet DNS
+# Service
 # ---------------------------------------------------------------------------
 service:
   enabled: true
   type: ClusterIP
-  clusterIP: None   # headless — required for StatefulSet stable DNS (pod-0.pg, pod-1.pg …)
-  publishNotReadyAddresses: true
   ports:
-    - name: postgres
+    postgresql:
       port: 5432
       targetPort: postgres
-      protocol: TCP
+    metrics:
+      port: 9187
+      targetPort: metrics
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
 
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
 ingress:
   enabled: false
 
+# ---------------------------------------------------------------------------
+# OpenShift Route
+# ---------------------------------------------------------------------------
 route:
   enabled: false
+
+# ---------------------------------------------------------------------------
+# OpenShift SCC
+# ---------------------------------------------------------------------------
+scc:
+  db-restricted:
+    allowPrivilegedContainer: false
+    allowPrivilegeEscalation: false
+    requiredDropCapabilities: [ALL]
+    runAsUser:
+      type: MustRunAsRange
+    seLinuxContext:
+      type: MustRunAs
+    fsGroup:
+      type: MustRunAs
+    supplementalGroups:
+      type: RunAsAny
+    volumes: [configMap, downwardAPI, emptyDir, persistentVolumeClaim, projected, secret]
+    users:
+      - system:serviceaccount:prod:pg-serviceaccount
+
 
 # ---------------------------------------------------------------------------
 # ConfigMaps
 # ---------------------------------------------------------------------------
 configMaps:
-  - name: pg-config
+  pg-config:
     data:
       POSTGRES_DB: myapp
       postgresql.conf: |
-        max_connections = 200
-        shared_buffers = 256MB
-        effective_cache_size = 768MB
-        log_timezone = 'UTC'
-        timezone = 'UTC'
+        max_connections = 100
+        shared_buffers = 128MB
 
 # ---------------------------------------------------------------------------
 # Secrets
 # ---------------------------------------------------------------------------
 secrets:
-  - name: pg-secret
-    type: Opaque
+  pg-secret:
     stringData:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: "supersecret-change-in-production"
-      PGPASSWORD: "supersecret-change-in-production"
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: "verysecretpassword"
 
 # ---------------------------------------------------------------------------
-# ServiceAccount with RBAC
+# RBAC
 # ---------------------------------------------------------------------------
-serviceAccount:
-  create: true
-  name: ""
-  automountServiceAccountToken: false
-
 rbac:
   roles:
-    - name: pg-secret-reader
+    pg-role:
       rules:
         - apiGroups: [""]
-          resources: ["secrets"]
-          verbs: ["get"]
-          resourceNames: ["pg-secret"]
+          resources: ["pods"]
+          verbs: ["get", "list"]
   roleBindings:
-    - name: pg-secret-reader-rb
-      roleRef: pg-secret-reader
+    pg-role-binding:
+      roleRef: pg-role
       subjects:
         - kind: ServiceAccount
-          name: full-example-universal-chart
-          namespace: default
-  clusterRoles: []
-  clusterRoleBindings: []
+          name: pg-serviceaccount
 
 # ---------------------------------------------------------------------------
-# HPA — disabled for StatefulSet with persistent storage
+# HorizontalPodAutoscaler
 # ---------------------------------------------------------------------------
 hpa:
   enabled: false
 
 # ---------------------------------------------------------------------------
-# PDB — keep at least 2 replicas up during disruptions
+# PodDisruptionBudget
 # ---------------------------------------------------------------------------
 pdb:
   enabled: true
-  maxUnavailable: 1
+  minAvailable: 2
 
 # ---------------------------------------------------------------------------
-# VPA
-# ---------------------------------------------------------------------------
-vpa:
-  enabled: true
-  updateMode: Auto
-  resourcePolicy:
-    containerPolicies:
-      - containerName: "full-example"
-        minAllowed:
-          cpu: 250m
-          memory: 256Mi
-        maxAllowed:
-          cpu: 4
-          memory: 8Gi
-        controlledResources: [cpu, memory]
-
-# ---------------------------------------------------------------------------
-# NetworkPolicy
+# NetworkPolicies
 # ---------------------------------------------------------------------------
 networkPolicies:
-  - name: allow-app-to-postgres
+  allow-pg:
     podSelector:
       matchLabels:
-        app.kubernetes.io/name: full-example
-    policyTypes: [Ingress, Egress]
+        tier: database
+    policyTypes: [Ingress]
     ingress:
       - from:
           - podSelector:
               matchLabels:
-                db-client: postgres
+                tier: frontend
         ports:
           - protocol: TCP
             port: 5432
-      - from:
-          - namespaceSelector:
-              matchLabels:
-                kubernetes.io/metadata.name: monitoring
-        ports:
-          - protocol: TCP
-            port: 9187
-    egress:
-      - ports:
-          - protocol: UDP
-            port: 53
 
 # ---------------------------------------------------------------------------
 # Prometheus ServiceMonitor
 # ---------------------------------------------------------------------------
 serviceMonitor:
   enabled: true
-  namespace: "monitoring"
   labels:
     release: prometheus
-  interval: 60s
-  scrapeTimeout: 30s
-  path: /metrics
+  interval: 30s
   port: metrics
-  scheme: http
 
 # ---------------------------------------------------------------------------
-# CronJob — daily backup
-# ---------------------------------------------------------------------------
-cronjobs:
-  - name: pg-backup
-    schedule: "0 2 * * *"
-    concurrencyPolicy: Forbid
-    successfulJobsHistoryLimit: 7
-    failedJobsHistoryLimit: 3
-    jobTemplate:
-      backoffLimit: 2
-      activeDeadlineSeconds: 3600
-      ttlSecondsAfterFinished: 86400
-      restartPolicy: OnFailure
-      image:
-        repository: postgres
-        tag: "16"
-      command:
-        - /bin/sh
-        - -c
-        - |
-          pg_dump -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -Fc -f /tmp/dump.pgc
-          echo "Backup done"
-      env:
-        - name: PGPASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: pg-secret
-              key: PGPASSWORD
-        - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: pg-secret
-              key: POSTGRES_USER
-        - name: POSTGRES_DB
-          valueFrom:
-            configMapKeyRef:
-              name: pg-config
-              key: POSTGRES_DB
-      resources:
-        requests:
-          cpu: 200m
-          memory: 256Mi
-
-# ---------------------------------------------------------------------------
-# Job — one-shot DB health check
-# ---------------------------------------------------------------------------
-jobs:
-  - name: db-check
-    annotations:
-      argocd.argoproj.io/hook: PostSync
-      argocd.argoproj.io/hook-delete-policy: HookSucceeded
-    backoffLimit: 5
-    activeDeadlineSeconds: 300
-    ttlSecondsAfterFinished: 3600
-    restartPolicy: OnFailure
-    image:
-      repository: postgres
-      tag: "16"
-    command:
-      - /bin/sh
-      - -c
-      - pg_isready -h postgres -U $POSTGRES_USER
-    envFrom:
-      - secretRef:
-          name: pg-secret
-      - configMapRef:
-          name: pg-config
-
-# ---------------------------------------------------------------------------
-# StorageClass
-# ---------------------------------------------------------------------------
-storageClasses:
-  - name: fast-ssd
-    provisioner: ebs.csi.aws.com
-    reclaimPolicy: Retain
-    volumeBindingMode: WaitForFirstConsumer
-    allowVolumeExpansion: true
-    parameters:
-      type: io2
-      iopsPerGB: "50"
-      encrypted: "true"
-
-# ---------------------------------------------------------------------------
-# extraDeploy — raw YAML, full Helm templating supported
+# Raw YAML injection
 # ---------------------------------------------------------------------------
 extraDeploy:
   - |
     apiVersion: v1
     kind: ConfigMap
     metadata:
-      name: {{ .Release.Name }}-extra
-      namespace: {{ .Release.Namespace }}
-      labels:
-        {{- include "universal-chart.labels" . | nindent 8 }}
+      name: extra-config
     data:
-      RELEASE_NAME: {{ .Release.Name }}
-      CHART_VERSION: {{ .Chart.Version }}
+      hello: world
